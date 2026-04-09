@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SnippetListView: View {
     @Environment(\.modelContext) private var modelContext
+    @Environment(SettingsManager.self) private var settings
     @Query(sort: \Snippet.abbreviation) private var snippets: [Snippet]
     @Query(sort: \SnippetGroup.sortOrder) private var groups: [SnippetGroup]
     @State private var selectedSnippetID: PersistentIdentifier?
@@ -23,6 +24,15 @@ struct SnippetListView: View {
                 $0.abbreviation.localizedStandardContains(searchText) ||
                 $0.label.localizedStandardContains(searchText)
             }
+        }
+        // Apply sort
+        switch settings.snippetSortOrder {
+        case .alphabetical:
+            result.sort { $0.abbreviation.localizedStandardCompare($1.abbreviation) == .orderedAscending }
+        case .mostUsed:
+            result.sort { $0.usageCount > $1.usageCount }
+        case .recentlyCreated:
+            result.sort { $0.createdAt > $1.createdAt }
         }
         return result
     }
@@ -142,6 +152,17 @@ struct SnippetListView: View {
             ToolbarItem {
                 Button(action: { showingImportSheet = true }) {
                     Label("Import", systemImage: "square.and.arrow.down")
+                }
+            }
+            ToolbarItem {
+                Menu {
+                    Picker("Sort by", selection: Bindable(settings).snippetSortOrder) {
+                        ForEach(SnippetSortOrder.allCases, id: \.self) { order in
+                            Text(order.label).tag(order)
+                        }
+                    }
+                } label: {
+                    Label("Sort", systemImage: "arrow.up.arrow.down")
                 }
             }
         }

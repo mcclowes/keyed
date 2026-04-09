@@ -85,19 +85,37 @@ final class ExpansionEngine: @unchecked Sendable {
 
     private func checkForMatch() {
         let abbreviations = Set(abbreviationMap.keys)
-        guard let matched = buffer.firstMatch(from: abbreviations),
-              let expansion = abbreviationMap[matched] else {
+
+        // Try exact match first, then case-insensitive
+        let matched: String
+        if let exact = buffer.firstMatch(from: abbreviations) {
+            matched = exact
+        } else if let caseInsensitive = buffer.firstMatchCaseInsensitive(from: abbreviations) {
+            matched = caseInsensitive
+        } else {
             return
         }
+
+        guard let expansion = abbreviationMap[matched] else { return }
+
+        // Detect case pattern from what was actually typed
+        let typed = buffer.typedSuffix(length: matched.count)
+        let casePattern = CaseTransform.detect(typed: typed, abbreviation: matched)
+        let caseExpansion = CaseTransform.apply(casePattern, to: expansion)
+
+        // Resolve placeholders
+        let resolver = PlaceholderResolver()
+        let cursorOffset = resolver.cursorOffset(in: caseExpansion)
+        let resolvedExpansion = resolver.resolve(resolver.stripCursorPlaceholder(caseExpansion))
 
         isExpanding = true
         buffer.reset()
 
         Task {
-            await injector.replaceText(abbreviationLength: matched.count, expansion: expansion)
+            await injector.replaceText(abbreviationLength: matched.count, expansion: resolvedExpansion, cursorOffset: cursorOffset)
             await MainActor.run {
                 self.isExpanding = false
-                self.delegate?.expansionEngine(self, didExpand: matched, to: expansion)
+                self.delegate?.expansionEngine(self, didExpand: matched, to: resolvedExpansion)
             }
         }
     }

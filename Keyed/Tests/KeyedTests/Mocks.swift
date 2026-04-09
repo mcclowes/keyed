@@ -15,10 +15,10 @@ final class MockKeystrokeMonitor: KeystrokeMonitoring, @unchecked Sendable {
 }
 
 final class MockTextInjector: TextInjecting, @unchecked Sendable {
-    var replaceTextCalls: [(abbreviationLength: Int, expansion: String)] = []
+    var replaceTextCalls: [(abbreviationLength: Int, expansion: String, cursorOffset: Int?)] = []
 
-    func replaceText(abbreviationLength: Int, expansion: String) async {
-        replaceTextCalls.append((abbreviationLength, expansion))
+    func replaceText(abbreviationLength: Int, expansion: String, cursorOffset: Int?) async {
+        replaceTextCalls.append((abbreviationLength, expansion, cursorOffset))
     }
 }
 

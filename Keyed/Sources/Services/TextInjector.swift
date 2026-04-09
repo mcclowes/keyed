@@ -3,13 +3,19 @@ import Carbon
 import Foundation
 
 protocol TextInjecting: Sendable {
-    func replaceText(abbreviationLength: Int, expansion: String) async
+    func replaceText(abbreviationLength: Int, expansion: String, cursorOffset: Int?) async
+}
+
+extension TextInjecting {
+    func replaceText(abbreviationLength: Int, expansion: String) async {
+        await replaceText(abbreviationLength: abbreviationLength, expansion: expansion, cursorOffset: nil)
+    }
 }
 
 final class ClipboardTextInjector: TextInjecting, @unchecked Sendable {
     private let pasteboard = NSPasteboard.general
 
-    func replaceText(abbreviationLength: Int, expansion: String) async {
+    func replaceText(abbreviationLength: Int, expansion: String, cursorOffset: Int?) async {
         // Save current clipboard
         let savedItems = savePasteboard()
 
@@ -31,8 +37,21 @@ final class ClipboardTextInjector: TextInjecting, @unchecked Sendable {
         postKeyEvent(keyCode: UInt16(kVK_ANSI_V), keyDown: true, flags: .maskCommand)
         postKeyEvent(keyCode: UInt16(kVK_ANSI_V), keyDown: false, flags: .maskCommand)
 
-        // Wait for paste to complete, then restore clipboard
+        // Wait for paste to complete
         try? await Task.sleep(for: .milliseconds(100))
+
+        // Move cursor if needed
+        if let offset = cursorOffset, offset > 0 {
+            try? await Task.sleep(for: .milliseconds(20))
+            for _ in 0..<offset {
+                postKeyEvent(keyCode: UInt16(kVK_LeftArrow), keyDown: true)
+                postKeyEvent(keyCode: UInt16(kVK_LeftArrow), keyDown: false)
+                try? await Task.sleep(for: .milliseconds(3))
+            }
+        }
+
+        // Restore clipboard
+        try? await Task.sleep(for: .milliseconds(50))
         restorePasteboard(savedItems)
     }
 

@@ -52,7 +52,33 @@ struct KeystrokeBuffer: Sendable {
         return true
     }
 
+    func hasSuffixCaseInsensitive(_ abbreviation: String) -> Bool {
+        let abbrevChars = Array(abbreviation)
+        guard abbrevChars.count <= count else { return false }
+
+        for i in 0..<abbrevChars.count {
+            let bufferIndex = (head + count - abbrevChars.count + i) % capacity
+            guard storage[bufferIndex].lowercased() == String(abbrevChars[i]).lowercased() else { return false }
+        }
+        return true
+    }
+
+    /// Returns the typed text matching the tail of the buffer for the given abbreviation length.
+    func typedSuffix(length: Int) -> String {
+        guard length <= count else { return "" }
+        var result = ""
+        for i in 0..<length {
+            let bufferIndex = (head + count - length + i) % capacity
+            result += storage[bufferIndex]
+        }
+        return result
+    }
+
     func firstMatch(from abbreviations: Set<String>) -> String? {
         abbreviations.first { hasSuffix($0) }
+    }
+
+    func firstMatchCaseInsensitive(from abbreviations: Set<String>) -> String? {
+        abbreviations.first { hasSuffixCaseInsensitive($0) }
     }
 }

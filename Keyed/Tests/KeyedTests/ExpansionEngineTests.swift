@@ -142,6 +142,36 @@ final class ExpansionEngineTests: XCTestCase {
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
     }
 
+    // MARK: - Case matching
+
+    func test_allCapsAbbreviation_expandsInAllCaps() async {
+        typeString(":EMAIL")
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "TEST@EXAMPLE.COM")
+    }
+
+    func test_titleCaseAbbreviation_expandsInTitleCase() async {
+        engine.updateAbbreviations([":sig": "best regards"])
+        typeString(":Sig")
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "Best regards")
+    }
+
+    func test_lowercaseAbbreviation_expandsAsIs() async {
+        typeString(":email")
+
+        try? await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "test@example.com")
+    }
+
     // MARK: - Helpers
 
     private func typeString(_ text: String) {
