@@ -9,6 +9,9 @@ struct SnippetListView: View {
     @State private var selectedGroupID: UUID?
     @State private var searchText = ""
     @State private var showingAddSheet = false
+    @State private var showingImportSheet = false
+    @State private var showingAddGroup = false
+    @State private var newGroupName = ""
 
     private var filteredSnippets: [Snippet] {
         var result = snippets
@@ -42,6 +45,21 @@ struct SnippetListView: View {
         .sheet(isPresented: $showingAddSheet) {
             AddSnippetView(groupID: selectedGroupID)
         }
+        .sheet(isPresented: $showingImportSheet) {
+            ImportView()
+        }
+        .alert("New Group", isPresented: $showingAddGroup) {
+            TextField("Group name", text: $newGroupName)
+            Button("Cancel", role: .cancel) { newGroupName = "" }
+            Button("Add") {
+                guard !newGroupName.isEmpty else { return }
+                let maxOrder = groups.map(\.sortOrder).max() ?? -1
+                let group = SnippetGroup(name: newGroupName, sortOrder: maxOrder + 1)
+                modelContext.insert(group)
+                try? modelContext.save()
+                newGroupName = ""
+            }
+        }
     }
 
     private var sidebar: some View {
@@ -55,26 +73,110 @@ struct SnippetListView: View {
                     NavigationLink(value: group.id) {
                         Label(group.name, systemImage: "folder")
                     }
+                    .contextMenu {
+                        Button("Rename...") {
+                            // Simple rename via alert would need additional state;
+                            // for now, editing in-place is deferred to v1.x
+                        }
+                        Button("Delete Group", role: .destructive) {
+                            deleteGroup(group)
+                        }
+                    }
+                }
+                .onDelete { offsets in
+                    for index in offsets {
+                        deleteGroup(groups[index])
+                    }
                 }
             }
         }
         .listStyle(.sidebar)
         .frame(minWidth: 160)
+        .toolbar {
+            ToolbarItem(placement: .automatic) {
+                Button(action: { showingAddGroup = true }) {
+                    Label("Add Group", systemImage: "folder.badge.plus")
+                }
+            }
+        }
     }
 
     private var snippetList: some View {
         List(filteredSnippets, selection: $selectedSnippetID) { snippet in
             SnippetRowView(snippet: snippet)
                 .tag(snippet.persistentModelID)
+                .contextMenu {
+                    Button("Duplicate") {
+                        duplicateSnippet(snippet)
+                    }
+                    Divider()
+                    Button("Delete", role: .destructive) {
+                        deleteSnippet(snippet)
+                    }
+                }
+                .swipeActions(edge: .trailing) {
+                    Button("Delete", role: .destructive) {
+                        deleteSnippet(snippet)
+                    }
+                }
         }
         .frame(minWidth: 220)
+        .overlay {
+            if filteredSnippets.isEmpty {
+                ContentUnavailableView {
+                    Label("No Snippets", systemImage: "text.badge.plus")
+                } description: {
+                    Text("Add a snippet to get started.")
+                } actions: {
+                    Button("Add Snippet") { showingAddSheet = true }
+                        .buttonStyle(.borderedProminent)
+                }
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button(action: { showingAddSheet = true }) {
                     Label("Add Snippet", systemImage: "plus")
                 }
             }
+            ToolbarItem {
+                Button(action: { showingImportSheet = true }) {
+                    Label("Import", systemImage: "square.and.arrow.down")
+                }
+            }
         }
+    }
+
+    private func deleteSnippet(_ snippet: Snippet) {
+        if snippet.persistentModelID == selectedSnippetID {
+            selectedSnippetID = nil
+        }
+        modelContext.delete(snippet)
+        try? modelContext.save()
+    }
+
+    private func duplicateSnippet(_ snippet: Snippet) {
+        let copy = Snippet(
+            abbreviation: snippet.abbreviation + "_copy",
+            expansion: snippet.expansion,
+            label: snippet.label,
+            groupID: snippet.groupID
+        )
+        modelContext.insert(copy)
+        try? modelContext.save()
+    }
+
+    private func deleteGroup(_ group: SnippetGroup) {
+        // Unassign snippets from this group
+        let groupID = group.id
+        for snippet in snippets where snippet.groupID == groupID {
+            snippet.groupID = nil
+        }
+        if selectedGroupID == groupID {
+            selectedGroupID = nil
+        }
+        modelContext.delete(group)
+        try? modelContext.save()
     }
 }
 

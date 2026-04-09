@@ -14,7 +14,10 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gear") }
+
+            ExclusionSettingsView()
+                .tabItem { Label("Excluded Apps", systemImage: "xmark.app") }
         }
-        .frame(width: 400, height: 200)
+        .frame(width: 450, height: 350)
     }
 }
