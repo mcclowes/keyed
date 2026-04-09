@@ -1,5 +1,5 @@
-import XCTest
 @testable import Keyed
+import XCTest
 
 @MainActor
 final class ExpansionEngineTests: XCTestCase {

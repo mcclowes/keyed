@@ -27,8 +27,8 @@ final class StatusBarController {
         }
 
         eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            if let self, self.popover.isShown {
-                self.popover.performClose(nil)
+            if let self, popover.isShown {
+                popover.performClose(nil)
             }
         }
     }

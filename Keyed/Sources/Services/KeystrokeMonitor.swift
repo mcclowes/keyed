@@ -2,7 +2,7 @@ import Carbon
 import Cocoa
 import Foundation
 
-enum KeystrokeEvent: Sendable {
+enum KeystrokeEvent {
     case character(String)
     case backspace
     case boundaryKey // arrow, tab, escape, mouse click — resets buffer
@@ -54,11 +54,11 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
                 return
             }
 
-            self.lock.lock()
-            self.eventTap = tap
-            self.runLoopSource = source
-            self.runLoop = CFRunLoopGetCurrent()
-            self.lock.unlock()
+            lock.lock()
+            eventTap = tap
+            runLoopSource = source
+            runLoop = CFRunLoopGetCurrent()
+            lock.unlock()
 
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
@@ -77,7 +77,7 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
         }
         eventTap = nil
         runLoopSource = nil
-        self.runLoop = nil
+        runLoop = nil
         lock.unlock()
     }
 
@@ -112,9 +112,13 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
         }
 
         // Extract the unicode character
-        var unicodeLength: Int = 1
+        var unicodeLength = 1
         var unicodeChar: [UniChar] = [0]
-        event.keyboardGetUnicodeString(maxStringLength: 1, actualStringLength: &unicodeLength, unicodeString: &unicodeChar)
+        event.keyboardGetUnicodeString(
+            maxStringLength: 1,
+            actualStringLength: &unicodeLength,
+            unicodeString: &unicodeChar
+        )
 
         guard unicodeLength > 0 else { return }
 

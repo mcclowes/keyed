@@ -6,8 +6,13 @@ final class MockKeystrokeMonitor: KeystrokeMonitoring, @unchecked Sendable {
     var startCallCount = 0
     var stopCallCount = 0
 
-    func start() { startCallCount += 1 }
-    func stop() { stopCallCount += 1 }
+    func start() {
+        startCallCount += 1
+    }
+
+    func stop() {
+        stopCallCount += 1
+    }
 
     func simulateKeystroke(_ event: KeystrokeEvent) {
         onKeystroke?(event)
@@ -26,6 +31,11 @@ final class MockAccessibilityService: AccessibilityChecking, @unchecked Sendable
     var trusted = true
     var requestTrustCallCount = 0
 
-    func isTrusted() -> Bool { trusted }
-    func requestTrust() { requestTrustCallCount += 1 }
+    func isTrusted() -> Bool {
+        trusted
+    }
+
+    func requestTrust() {
+        requestTrustCallCount += 1
+    }
 }

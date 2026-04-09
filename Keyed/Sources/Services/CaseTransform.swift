@@ -1,6 +1,6 @@
 import Foundation
 
-enum CasePattern: Sendable {
+enum CasePattern {
     case asIs
     case allUpper
     case titleCase
@@ -12,7 +12,7 @@ enum CaseTransform {
         let typedLetters = typed.filter(\.isLetter)
         guard !typedLetters.isEmpty else { return .asIs }
 
-        if typedLetters == typedLetters.uppercased() && typedLetters != typedLetters.lowercased() {
+        if typedLetters == typedLetters.uppercased(), typedLetters != typedLetters.lowercased() {
             return .allUpper
         }
 
@@ -32,11 +32,11 @@ enum CaseTransform {
     static func apply(_ pattern: CasePattern, to text: String) -> String {
         switch pattern {
         case .asIs:
-            return text
+            text
         case .allUpper:
-            return text.uppercased()
+            text.uppercased()
         case .titleCase:
-            return titleCase(text)
+            titleCase(text)
         }
     }
 

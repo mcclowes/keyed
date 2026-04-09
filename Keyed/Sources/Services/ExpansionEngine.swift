@@ -1,5 +1,8 @@
 import AppKit
 import Foundation
+import OSLog
+
+private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "ExpansionEngine")
 
 @MainActor
 protocol ExpansionEngineDelegate: AnyObject {
@@ -25,7 +28,7 @@ final class ExpansionEngine: @unchecked Sendable {
     ) {
         self.monitor = monitor
         self.injector = injector
-        self.buffer = KeystrokeBuffer(capacity: bufferCapacity)
+        buffer = KeystrokeBuffer(capacity: bufferCapacity)
     }
 
     func updateAbbreviations(_ map: [String: String]) {
@@ -50,12 +53,14 @@ final class ExpansionEngine: @unchecked Sendable {
             }
         }
         monitor.start()
+        logger.info("Expansion engine started")
     }
 
     func stop() {
         monitor.stop()
         monitor.onKeystroke = nil
         buffer.reset()
+        logger.info("Expansion engine stopped")
     }
 
     private func handleKeystroke(_ event: KeystrokeEvent) {
@@ -63,12 +68,13 @@ final class ExpansionEngine: @unchecked Sendable {
 
         // Check if frontmost app is excluded
         if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-           excludedBundleIDs.contains(bundleID) {
+           excludedBundleIDs.contains(bundleID)
+        {
             return
         }
 
         switch event {
-        case .character(let char):
+        case let .character(char):
             buffer.append(char)
             checkForMatch()
 
@@ -108,11 +114,16 @@ final class ExpansionEngine: @unchecked Sendable {
         let cursorOffset = resolver.cursorOffset(in: caseExpansion)
         let resolvedExpansion = resolver.resolve(resolver.stripCursorPlaceholder(caseExpansion))
 
+        logger.info("Expanding '\(matched)' → \(resolvedExpansion.prefix(50))...")
         isExpanding = true
         buffer.reset()
 
         Task {
-            await injector.replaceText(abbreviationLength: matched.count, expansion: resolvedExpansion, cursorOffset: cursorOffset)
+            await injector.replaceText(
+                abbreviationLength: matched.count,
+                expansion: resolvedExpansion,
+                cursorOffset: cursorOffset
+            )
             await MainActor.run {
                 self.isExpanding = false
                 self.delegate?.expansionEngine(self, didExpand: matched, to: resolvedExpansion)

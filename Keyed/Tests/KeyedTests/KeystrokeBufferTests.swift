@@ -1,8 +1,7 @@
-import XCTest
 @testable import Keyed
+import XCTest
 
 final class KeystrokeBufferTests: XCTestCase {
-
     // MARK: - Basic appending
 
     func test_append_singleCharacter_bufferContainsIt() {
@@ -82,7 +81,7 @@ final class KeystrokeBufferTests: XCTestCase {
         for char in ":email" {
             buffer.append(String(char))
         }
-        let abbreviations: Set<String> = [":email", ":sig", ":addr"]
+        let abbreviations: Set = [":email", ":sig", ":addr"]
         XCTAssertEqual(buffer.firstMatch(from: abbreviations), ":email")
     }
 
@@ -91,7 +90,7 @@ final class KeystrokeBufferTests: XCTestCase {
         for char in ":em" {
             buffer.append(String(char))
         }
-        let abbreviations: Set<String> = [":email", ":sig"]
+        let abbreviations: Set = [":email", ":sig"]
         XCTAssertNil(buffer.firstMatch(from: abbreviations))
     }
 

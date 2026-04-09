@@ -39,9 +39,11 @@ struct OnboardingView: View {
             Text("Welcome to Keyed")
                 .font(.title)
                 .fontWeight(.semibold)
-            Text("A lightweight text expansion tool for your Mac. Type a short abbreviation, and Keyed replaces it with the full text — everywhere.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+            Text(
+                "A lightweight text expansion tool for your Mac. Type a short abbreviation, and Keyed replaces it with the full text — everywhere."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
             Spacer()
             Button("Get Started") { step = .accessibility }
                 .buttonStyle(.borderedProminent)
@@ -57,9 +59,11 @@ struct OnboardingView: View {
             Text("Accessibility Permission")
                 .font(.title2)
                 .fontWeight(.semibold)
-            Text("Keyed uses macOS Accessibility to detect what you type and replace abbreviations with your saved snippets. This happens entirely on your device. Nothing leaves your Mac.")
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+            Text(
+                "Keyed uses macOS Accessibility to detect what you type and replace abbreviations with your saved snippets. This happens entirely on your device. Nothing leaves your Mac."
+            )
+            .multilineTextAlignment(.center)
+            .foregroundStyle(.secondary)
             Spacer()
             if isTrusted {
                 Label("Permission granted", systemImage: "checkmark.circle.fill")

@@ -1,9 +1,26 @@
 import Foundation
+import OSLog
 import SwiftData
+
+private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "SnippetStore")
+
+@MainActor
+protocol SnippetStoring {
+    var abbreviationMap: [String: String] { get }
+    func addSnippet(abbreviation: String, expansion: String, label: String, groupID: UUID?) throws -> Snippet
+    func deleteSnippet(_ snippet: Snippet) throws
+    func allSnippets() -> [Snippet]
+    func findSnippet(byAbbreviation abbreviation: String) -> Snippet?
+    func searchSnippets(query: String) -> [Snippet]
+    func incrementUsageCount(for abbreviation: String)
+    func allGroups() -> [SnippetGroup]
+    func addGroup(name: String) throws -> SnippetGroup
+    func deleteGroup(_ group: SnippetGroup) throws
+}
 
 @MainActor
 @Observable
-final class SnippetStore {
+final class SnippetStore: SnippetStoring {
     private let modelContext: ModelContext
     private(set) var abbreviationMap: [String: String] = [:]
 
@@ -14,7 +31,12 @@ final class SnippetStore {
 
     // MARK: - Snippet CRUD
 
-    func addSnippet(abbreviation: String, expansion: String, label: String = "", groupID: UUID? = nil) throws -> Snippet {
+    func addSnippet(
+        abbreviation: String,
+        expansion: String,
+        label: String = "",
+        groupID: UUID? = nil
+    ) throws -> Snippet {
         guard !abbreviation.isEmpty else {
             throw SnippetStoreError.emptyAbbreviation
         }
@@ -25,10 +47,17 @@ final class SnippetStore {
         modelContext.insert(snippet)
         try modelContext.save()
         rebuildAbbreviationMap()
+        logger.info("Added snippet: \(abbreviation)")
         return snippet
     }
 
-    func updateSnippet(_ snippet: Snippet, abbreviation: String? = nil, expansion: String? = nil, label: String? = nil, groupID: UUID?? = nil) throws {
+    func updateSnippet(
+        _ snippet: Snippet,
+        abbreviation: String? = nil,
+        expansion: String? = nil,
+        label: String? = nil,
+        groupID: UUID?? = nil
+    ) throws {
         if let abbreviation {
             guard !abbreviation.isEmpty else {
                 throw SnippetStoreError.emptyAbbreviation
@@ -47,6 +76,7 @@ final class SnippetStore {
     }
 
     func deleteSnippet(_ snippet: Snippet) throws {
+        logger.info("Deleting snippet: \(snippet.abbreviation)")
         modelContext.delete(snippet)
         try modelContext.save()
         rebuildAbbreviationMap()
@@ -75,7 +105,7 @@ final class SnippetStore {
         let descriptor = FetchDescriptor<Snippet>(
             predicate: #Predicate {
                 $0.abbreviation.localizedStandardContains(query) ||
-                $0.label.localizedStandardContains(query)
+                    $0.label.localizedStandardContains(query)
             },
             sortBy: [SortDescriptor(\.abbreviation)]
         )
@@ -128,9 +158,9 @@ enum SnippetStoreError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .emptyAbbreviation:
-            return "Abbreviation cannot be empty."
-        case .duplicateAbbreviation(let abbrev):
-            return "A snippet with abbreviation '\(abbrev)' already exists."
+            "Abbreviation cannot be empty."
+        case let .duplicateAbbreviation(abbrev):
+            "A snippet with abbreviation '\(abbrev)' already exists."
         }
     }
 }

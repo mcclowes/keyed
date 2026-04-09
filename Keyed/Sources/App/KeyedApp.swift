@@ -1,5 +1,8 @@
+import OSLog
 import SwiftData
 import SwiftUI
+
+private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "App")
 
 @main
 struct KeyedApp: App {
@@ -50,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let engine = ExpansionEngine(monitor: monitor, injector: injector)
         engine.updateAbbreviations(snippetStore.abbreviationMap)
         engine.delegate = self
-        self.expansionEngine = engine
+        expansionEngine = engine
 
         // Only start if accessibility is trusted
         if accessibilityService.isTrusted() {
@@ -71,20 +74,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func observeSettings() {
-        // Poll for settings and snippet changes using a timer
-        // (withObservationTracking would be ideal but requires careful setup)
-        Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        observeSettingsLoop()
+        observeSnippetsLoop()
+    }
+
+    private func observeSettingsLoop() {
+        withObservationTracking {
+            _ = settingsManager.isEnabled
+        } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 self.expansionEngine?.setEnabled(self.settingsManager.isEnabled)
+                self.observeSettingsLoop()
+            }
+        }
+    }
+
+    private func observeSnippetsLoop() {
+        withObservationTracking {
+            _ = snippetStore.abbreviationMap
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
                 self.expansionEngine?.updateAbbreviations(self.snippetStore.abbreviationMap)
 
-                // Update excluded apps from SwiftData
+                // Also sync excluded apps
                 let descriptor = FetchDescriptor<AppExclusion>()
                 if let exclusions = try? self.modelContainer.mainContext.fetch(descriptor) {
                     let bundleIDs = Set(exclusions.map(\.bundleIdentifier))
                     self.expansionEngine?.updateExcludedApps(bundleIDs)
                 }
+                self.observeSnippetsLoop()
             }
         }
     }

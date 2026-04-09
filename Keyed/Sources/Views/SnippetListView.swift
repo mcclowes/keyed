@@ -22,7 +22,7 @@ struct SnippetListView: View {
         if !searchText.isEmpty {
             result = result.filter {
                 $0.abbreviation.localizedStandardContains(searchText) ||
-                $0.label.localizedStandardContains(searchText)
+                    $0.label.localizedStandardContains(searchText)
             }
         }
         // Apply sort
@@ -44,10 +44,15 @@ struct SnippetListView: View {
             snippetList
         } detail: {
             if let selectedID = selectedSnippetID,
-               let snippet = snippets.first(where: { $0.persistentModelID == selectedID }) {
+               let snippet = snippets.first(where: { $0.persistentModelID == selectedID })
+            {
                 SnippetDetailView(snippet: snippet)
             } else {
-                ContentUnavailableView("Select a snippet", systemImage: "text.cursor", description: Text("Choose a snippet from the list to view or edit it."))
+                ContentUnavailableView(
+                    "Select a snippet",
+                    systemImage: "text.cursor",
+                    description: Text("Choose a snippet from the list to view or edit it.")
+                )
             }
         }
         .searchable(text: $searchText, prompt: "Search snippets")
@@ -131,6 +136,20 @@ struct SnippetListView: View {
                 }
         }
         .frame(minWidth: 220)
+        .onKeyPress(.escape) {
+            selectedSnippetID = nil
+            return .handled
+        }
+        .onKeyPress(.return) {
+            guard let selectedID = selectedSnippetID,
+                  let snippet = filteredSnippets.first(where: { $0.persistentModelID == selectedID })
+            else {
+                return .ignored
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(snippet.expansion, forType: .string)
+            return .handled
+        }
         .overlay {
             if filteredSnippets.isEmpty {
                 ContentUnavailableView {

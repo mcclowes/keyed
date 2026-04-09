@@ -1,6 +1,6 @@
+@testable import Keyed
 import SwiftData
 import XCTest
-@testable import Keyed
 
 @MainActor
 final class SnippetStoreTests: XCTestCase {

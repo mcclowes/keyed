@@ -1,5 +1,5 @@
-import XCTest
 @testable import Keyed
+import XCTest
 
 final class ImportServiceTests: XCTestCase {
     private var service: ImportService!
@@ -91,7 +91,7 @@ final class ImportServiceTests: XCTestCase {
         </dict>
         </plist>
         """
-        let data = plist.data(using: .utf8)!
+        let data = try XCTUnwrap(plist.data(using: .utf8))
         let results = try service.parseTextExpanderPlist(data)
         XCTAssertEqual(results.count, 2)
         XCTAssertEqual(results[0].abbreviation, ":email")

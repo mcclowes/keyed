@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-struct PlaceholderResolver: Sendable {
+struct PlaceholderResolver {
     func resolve(_ text: String) -> String {
         var result = text
 

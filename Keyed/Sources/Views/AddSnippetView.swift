@@ -22,7 +22,7 @@ struct AddSnippetView: View {
             Form {
                 TextField("Abbreviation", text: $abbreviation)
                     .font(.system(.body, design: .monospaced))
-                if isDuplicate && !abbreviation.isEmpty {
+                if isDuplicate, !abbreviation.isEmpty {
                     Text("A snippet with this abbreviation already exists.")
                         .foregroundStyle(.orange)
                         .font(.caption)

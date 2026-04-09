@@ -18,13 +18,13 @@ final class Snippet {
         label: String = "",
         groupID: UUID? = nil
     ) {
-        self.id = UUID()
+        id = UUID()
         self.abbreviation = abbreviation
         self.expansion = expansion
         self.label = label
         self.groupID = groupID
-        self.usageCount = 0
-        self.createdAt = .now
-        self.updatedAt = .now
+        usageCount = 0
+        createdAt = .now
+        updatedAt = .now
     }
 }

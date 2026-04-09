@@ -8,7 +8,7 @@ final class SnippetGroup {
     var sortOrder: Int
 
     init(name: String, sortOrder: Int = 0) {
-        self.id = UUID()
+        id = UUID()
         self.name = name
         self.sortOrder = sortOrder
     }

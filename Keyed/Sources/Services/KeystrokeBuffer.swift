@@ -1,6 +1,6 @@
 import Foundation
 
-struct KeystrokeBuffer: Sendable {
+struct KeystrokeBuffer {
     private var storage: [String]
     private var head: Int = 0
     private var count: Int = 0
@@ -8,7 +8,7 @@ struct KeystrokeBuffer: Sendable {
 
     init(capacity: Int) {
         self.capacity = capacity
-        self.storage = Array(repeating: "", count: capacity)
+        storage = Array(repeating: "", count: capacity)
     }
 
     mutating func append(_ character: String) {

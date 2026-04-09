@@ -1,9 +1,20 @@
 import Foundation
+import OSLog
 import ServiceManagement
+
+private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "SettingsManager")
+
+@MainActor
+protocol SettingsManaging {
+    var isEnabled: Bool { get set }
+    var launchAtLogin: Bool { get set }
+    var playSound: Bool { get set }
+    var snippetSortOrder: SnippetSortOrder { get set }
+}
 
 @MainActor
 @Observable
-final class SettingsManager {
+final class SettingsManager: SettingsManaging {
     private let defaults: UserDefaults
 
     var isEnabled: Bool {
@@ -36,10 +47,11 @@ final class SettingsManager {
             Keys.snippetSortOrder: SnippetSortOrder.alphabetical.rawValue,
         ])
 
-        self.isEnabled = defaults.bool(forKey: Keys.isEnabled)
-        self.launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
-        self.playSound = defaults.bool(forKey: Keys.playSound)
-        self.snippetSortOrder = SnippetSortOrder(rawValue: defaults.string(forKey: Keys.snippetSortOrder) ?? "") ?? .alphabetical
+        isEnabled = defaults.bool(forKey: Keys.isEnabled)
+        launchAtLogin = defaults.bool(forKey: Keys.launchAtLogin)
+        playSound = defaults.bool(forKey: Keys.playSound)
+        snippetSortOrder = SnippetSortOrder(rawValue: defaults.string(forKey: Keys.snippetSortOrder) ?? "") ??
+            .alphabetical
     }
 
     private func updateLoginItem() {
@@ -62,7 +74,7 @@ final class SettingsManager {
     }
 }
 
-enum SnippetSortOrder: String, CaseIterable, Sendable {
+enum SnippetSortOrder: String, CaseIterable {
     case alphabetical
     case mostUsed
     case recentlyCreated

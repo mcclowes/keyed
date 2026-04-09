@@ -1,8 +1,7 @@
-import XCTest
 @testable import Keyed
+import XCTest
 
 final class CaseTransformTests: XCTestCase {
-
     // MARK: - Detection
 
     func test_detect_exactMatch_returnsAsIs() {

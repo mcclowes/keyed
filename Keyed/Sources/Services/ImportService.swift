@@ -1,18 +1,18 @@
 import Foundation
 
-struct ImportedSnippet: Sendable {
+struct ImportedSnippet {
     let abbreviation: String
     let expansion: String
     let label: String
     let groupName: String?
 }
 
-struct ImportService: Sendable {
-
+struct ImportService {
     // MARK: - CSV
 
     func parseCSV(_ content: String) throws -> [ImportedSnippet] {
-        let lines = content.components(separatedBy: .newlines).filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let lines = content.components(separatedBy: .newlines)
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         guard lines.count > 1 else { return [] }
 
         let header = parseCSVLine(lines[0])
@@ -48,7 +48,7 @@ struct ImportService: Sendable {
         for char in line {
             if char == "\"" {
                 inQuotes.toggle()
-            } else if char == "," && !inQuotes {
+            } else if char == ",", !inQuotes {
                 fields.append(current.trimmingCharacters(in: .whitespaces))
                 current = ""
             } else {
@@ -74,7 +74,8 @@ struct ImportService: Sendable {
 
         return snippets.compactMap { dict in
             guard let abbreviation = dict["abbreviation"] as? String,
-                  let expansion = dict["plainText"] as? String else {
+                  let expansion = dict["plainText"] as? String
+            else {
                 return nil
             }
             let label = dict["label"] as? String ?? ""
@@ -90,9 +91,9 @@ enum ImportError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingRequiredColumns:
-            return "CSV file must have 'abbreviation' and 'expansion' columns."
+            "CSV file must have 'abbreviation' and 'expansion' columns."
         case .invalidFormat:
-            return "File format is not recognized."
+            "File format is not recognized."
         }
     }
 }

@@ -78,10 +78,10 @@ struct RunningAppPickerView: View {
         let icon: NSImage?
 
         init(from nsApp: NSRunningApplication) {
-            self.id = nsApp.bundleIdentifier ?? UUID().uuidString
-            self.name = nsApp.localizedName ?? "Unknown"
-            self.bundleIdentifier = nsApp.bundleIdentifier ?? ""
-            self.icon = nsApp.icon
+            id = nsApp.bundleIdentifier ?? UUID().uuidString
+            name = nsApp.localizedName ?? "Unknown"
+            bundleIdentifier = nsApp.bundleIdentifier ?? ""
+            icon = nsApp.icon
         }
     }
 
@@ -90,7 +90,7 @@ struct RunningAppPickerView: View {
         if searchText.isEmpty { return filtered }
         return filtered.filter {
             $0.name.localizedStandardContains(searchText) ||
-            $0.bundleIdentifier.localizedStandardContains(searchText)
+                $0.bundleIdentifier.localizedStandardContains(searchText)
         }
     }
 

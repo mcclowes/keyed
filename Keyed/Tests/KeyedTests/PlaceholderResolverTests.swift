@@ -1,5 +1,5 @@
-import XCTest
 @testable import Keyed
+import XCTest
 
 final class PlaceholderResolverTests: XCTestCase {
     private let resolver = PlaceholderResolver()

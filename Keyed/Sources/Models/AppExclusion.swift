@@ -8,7 +8,7 @@ final class AppExclusion {
     var appName: String
 
     init(bundleIdentifier: String, appName: String) {
-        self.id = UUID()
+        id = UUID()
         self.bundleIdentifier = bundleIdentifier
         self.appName = appName
     }
