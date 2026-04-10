@@ -22,9 +22,11 @@ protocol SnippetStoring: AnyObject {
     func deleteSnippet(_ snippet: Snippet) throws
     func duplicateSnippet(_ snippet: Snippet) throws -> Snippet
     func incrementUsageCount(for abbreviation: String)
+    func setPinned(_ snippet: Snippet, isPinned: Bool) throws
 
     // Queries
     func allSnippets() -> [Snippet]
+    func pinnedSnippets() -> [Snippet]
     func findSnippet(byAbbreviation abbreviation: String) -> Snippet?
     func searchSnippets(query: String) -> [Snippet]
 
@@ -129,6 +131,17 @@ final class SnippetStore: SnippetStoring {
         )
     }
 
+    func setPinned(_ snippet: Snippet, isPinned: Bool) throws {
+        guard snippet.isPinned != isPinned else { return }
+        snippet.isPinned = isPinned
+        if isPinned {
+            let maxOrder = pinnedSnippets().map(\.pinnedSortOrder).max() ?? -1
+            snippet.pinnedSortOrder = maxOrder + 1
+        }
+        snippet.updatedAt = .now
+        try modelContext.save()
+    }
+
     func incrementUsageCount(for abbreviation: String) {
         guard let snippet = findSnippet(byAbbreviationCaseInsensitive: abbreviation) else { return }
         snippet.usageCount += 1
@@ -152,6 +165,14 @@ final class SnippetStore: SnippetStoring {
 
     func allSnippets() -> [Snippet] {
         let descriptor = FetchDescriptor<Snippet>(sortBy: [SortDescriptor(\.abbreviation)])
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
+    func pinnedSnippets() -> [Snippet] {
+        let descriptor = FetchDescriptor<Snippet>(
+            predicate: #Predicate { $0.isPinned },
+            sortBy: [SortDescriptor(\.pinnedSortOrder), SortDescriptor(\.abbreviation)]
+        )
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 

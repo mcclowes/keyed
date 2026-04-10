@@ -182,6 +182,36 @@ final class ExpansionEngineTests: XCTestCase {
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "test@example.com")
     }
 
+    // MARK: - Direct injection (pinned snippets)
+
+    func test_injectSnippet_postsExpansionWithZeroBackspaces() async {
+        let snippet = Snippet(abbreviation: ":hi", expansion: "Hello there!")
+        await engine.injectSnippet(snippet)
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.abbreviationLength, 0)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "Hello there!")
+    }
+
+    func test_injectSnippet_resolvesCursorPlaceholder() async {
+        let snippet = Snippet(abbreviation: ":wrap", expansion: "<b>{cursor}</b>")
+        await engine.injectSnippet(snippet)
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "<b></b>")
+        XCTAssertEqual(injector.replaceTextCalls.first?.cursorOffset, 4)
+    }
+
+    func test_injectSnippet_doesNotAffectTypedBuffer() async {
+        typeString(":ema")
+        let snippet = Snippet(abbreviation: ":pinned", expansion: "pinned text")
+        await engine.injectSnippet(snippet)
+        // After direct injection, buffer is reset, so ":il" typed next should not complete ":email".
+        typeString("il")
+        await waitForInjector()
+        // Only the direct injection call should have happened.
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "pinned text")
+    }
+
     // MARK: - Helpers
 
     private func typeString(_ text: String) {

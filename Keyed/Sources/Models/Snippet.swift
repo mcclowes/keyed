@@ -9,6 +9,8 @@ final class Snippet {
     var label: String
     var groupID: UUID?
     var usageCount: Int
+    var isPinned: Bool = false
+    var pinnedSortOrder: Int = 0
     var createdAt: Date
     var updatedAt: Date
 
@@ -16,7 +18,9 @@ final class Snippet {
         abbreviation: String,
         expansion: String,
         label: String = "",
-        groupID: UUID? = nil
+        groupID: UUID? = nil,
+        isPinned: Bool = false,
+        pinnedSortOrder: Int = 0
     ) {
         id = UUID()
         self.abbreviation = abbreviation
@@ -24,6 +28,8 @@ final class Snippet {
         self.label = label
         self.groupID = groupID
         usageCount = 0
+        self.isPinned = isPinned
+        self.pinnedSortOrder = pinnedSortOrder
         createdAt = .now
         updatedAt = .now
     }

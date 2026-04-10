@@ -56,7 +56,7 @@ Keyed/
       SnippetListView.swift               # Main NavigationSplitView with sidebar + list
       SnippetDetailView.swift             # Edit snippet form
       AddSnippetView.swift                # New snippet sheet with duplicate detection
-      MenuBarPopoverView.swift            # Status bar popover
+      MenuBarPopoverView.swift            # Status bar popover with pinned snippets
       OnboardingView.swift                # Multi-step first-launch wizard
       SettingsView.swift                  # Tabbed preferences (General + Excluded Apps)
       ExclusionSettingsView.swift         # Per-app exclusion management
@@ -77,11 +77,11 @@ Keyed/
 
 ## Key modules
 
-- **`ExpansionEngine`** — orchestrates keystroke monitoring + abbreviation matching + text injection. Case-insensitive matching with case-aware expansion, word-boundary enforcement (no mid-word expansion), cached abbreviation list. Placeholder resolution. App exclusions. `isExpanding` guard prevents feedback loops.
+- **`ExpansionEngine`** — orchestrates keystroke monitoring + abbreviation matching + text injection. Case-insensitive matching with case-aware expansion, word-boundary enforcement (no mid-word expansion), cached abbreviation list. Placeholder resolution. App exclusions. `isExpanding` guard prevents feedback loops. Exposes `injectSnippet(_:)` for menu-bar pinned-snippet insertion (no abbreviation to delete; resolves placeholders + `{cursor}`).
 - **`KeystrokeBuffer`** — fixed-capacity ring buffer tracking typed characters. Supports exact and case-insensitive suffix matching, backspace, reset on boundary keys, and word-boundary lookbehind.
 - **`CGEventTapMonitor`** — system-wide keystroke capture via CGEventTap on a dedicated dispatch queue. Handles modifier keys (Option passes through for character composition), boundary keys, unicode extraction (4 UTF-16 code units for non-BMP support), `tapDisabledByTimeout`/`tapDisabledByUserInput` re-enablement. Manages its own retain via `Unmanaged` for lifetime safety.
 - **`UnicodeEventTextInjector`** — text injection via `CGEvent.keyboardSetUnicodeString`. No clipboard involvement — deletes the abbreviation with backspaces, then posts the expansion as a series of synthetic key events carrying Unicode string payloads.
-- **`SnippetStore`** (`SnippetStoring` protocol) — SwiftData CRUD + abbreviation/exclusion caches. **All UI mutations go through this store** so the engine's live caches stay in sync. Case-insensitive duplicate detection, batched usage-count writes, group management, exclusion management.
+- **`SnippetStore`** (`SnippetStoring` protocol) — SwiftData CRUD + abbreviation/exclusion caches. **All UI mutations go through this store** so the engine's live caches stay in sync. Case-insensitive duplicate detection, batched usage-count writes, group management, exclusion management, pin/unpin (`setPinned`, `pinnedSnippets`).
 - **`SettingsManager`** (`SettingsManaging` protocol) — UserDefaults-backed `@Observable` with launch-at-login via `SMAppService`.
 - **`ImportService`** — RFC 4180 CSV parser (quoted fields, escaped `""` quotes, embedded newlines, case-insensitive headers) and TextExpander `.textexpander` plist parser.
 - **`CaseTransform`** — detects ALL CAPS / Title Case from typed input, applies transform to expansion text.
@@ -89,13 +89,13 @@ Keyed/
 
 ## Testing
 
-88 tests across 6 files. Run with `make test`.
+98 tests across 6 files. Run with `make test`.
 
 | File | Tests | Covers |
 |------|-------|--------|
 | `KeystrokeBufferTests` | 21 | Ring buffer, matching, word boundary, longest match, unicode, overflow, backspace |
-| `ExpansionEngineTests` | 19 | Matching, word boundary, ambiguous prefixes, disable, case, backspace |
-| `SnippetStoreTests` | 20 | CRUD, search, groups, usage count, exclusions, duplicate-collision, staleness regression |
+| `ExpansionEngineTests` | 22 | Matching, word boundary, ambiguous prefixes, disable, case, backspace, direct injection (pinned) |
+| `SnippetStoreTests` | 27 | CRUD, search, groups, usage count, exclusions, duplicate-collision, pinning, staleness regression |
 | `ImportServiceTests` | 9 | CSV, escaped quotes, embedded newlines, case-insensitive headers, TextExpander plist |
 | `CaseTransformTests` | 10 | Detection + application of case patterns including preservation of existing caps |
 | `PlaceholderResolverTests` | 9 | Date/time, cursor offset, strip |

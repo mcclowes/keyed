@@ -131,6 +131,9 @@ struct SnippetListView: View {
             SnippetRowView(snippet: snippet)
                 .tag(snippet.persistentModelID)
                 .contextMenu {
+                    Button(snippet.isPinned ? "Unpin from Menu Bar" : "Pin to Menu Bar") {
+                        togglePin(snippet)
+                    }
                     Button("Duplicate") {
                         duplicateSnippet(snippet)
                     }
@@ -138,6 +141,17 @@ struct SnippetListView: View {
                     Button("Delete", role: .destructive) {
                         deleteSnippet(snippet)
                     }
+                }
+                .swipeActions(edge: .leading) {
+                    Button {
+                        togglePin(snippet)
+                    } label: {
+                        Label(
+                            snippet.isPinned ? "Unpin" : "Pin",
+                            systemImage: snippet.isPinned ? "pin.slash" : "pin"
+                        )
+                    }
+                    .tint(.yellow)
                 }
                 .swipeActions(edge: .trailing) {
                     Button("Delete", role: .destructive) {
@@ -191,6 +205,14 @@ struct SnippetListView: View {
         }
     }
 
+    private func togglePin(_ snippet: Snippet) {
+        do {
+            try store.setPinned(snippet, isPinned: !snippet.isPinned)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
     private func deleteSnippet(_ snippet: Snippet) {
         if snippet.persistentModelID == selectedSnippetID {
             selectedSnippetID = nil
@@ -226,19 +248,28 @@ struct SnippetRowView: View {
     let snippet: Snippet
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(snippet.abbreviation)
-                .font(.system(.body, design: .monospaced))
-                .fontWeight(.medium)
-            if !snippet.label.isEmpty {
-                Text(snippet.label)
+        HStack(spacing: 6) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(snippet.abbreviation)
+                    .font(.system(.body, design: .monospaced))
+                    .fontWeight(.medium)
+                if !snippet.label.isEmpty {
+                    Text(snippet.label)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text(snippet.expansion)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 0)
+            if snippet.isPinned {
+                Image(systemName: "pin.fill")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text(snippet.expansion)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    .foregroundStyle(.yellow)
+                    .help("Pinned to menu bar")
             }
         }
         .padding(.vertical, 2)

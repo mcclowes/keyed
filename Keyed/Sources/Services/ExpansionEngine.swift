@@ -125,6 +125,26 @@ final class ExpansionEngine {
         }
     }
 
+    /// Injects a snippet's expansion directly at the current cursor position without
+    /// requiring a typed abbreviation. Used by the menu bar pinned-snippets feature.
+    /// Resolves placeholders and honors `{cursor}` positioning, but does not apply
+    /// case transformation (there is no typed input to derive a case from).
+    func injectSnippet(_ snippet: Snippet) async {
+        let expansion = snippet.expansion
+        let cursorOffset = placeholderResolver.cursorOffset(in: expansion)
+        let resolved = placeholderResolver.resolve(placeholderResolver.stripCursorPlaceholder(expansion))
+
+        isExpanding = true
+        buffer.reset()
+        await injector.replaceText(
+            abbreviationLength: 0,
+            expansion: resolved,
+            cursorOffset: cursorOffset
+        )
+        isExpanding = false
+        delegate?.expansionEngine(self, didExpand: snippet.abbreviation, to: resolved)
+    }
+
     #if DEBUG
         func handleKeystrokeForTesting(_ event: KeystrokeEvent) {
             handleKeystroke(event)

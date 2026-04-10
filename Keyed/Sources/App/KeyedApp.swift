@@ -59,11 +59,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        statusBarController = StatusBarController(
-            settingsManager: settingsManager,
-            snippetStore: snippetStore
-        )
-
         let monitor = CGEventTapMonitor()
         let injector = UnicodeEventTextInjector()
         let engine = ExpansionEngine(monitor: monitor, injector: injector)
@@ -71,6 +66,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.updateExcludedApps(snippetStore.excludedBundleIDs)
         engine.delegate = self
         expansionEngine = engine
+
+        statusBarController = StatusBarController(
+            settingsManager: settingsManager,
+            snippetStore: snippetStore,
+            expansionEngine: engine
+        )
 
         if accessibilityService.isTrusted() {
             engine.start()
