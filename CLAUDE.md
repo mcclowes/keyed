@@ -81,21 +81,21 @@ Keyed/
 - **`KeystrokeBuffer`** — fixed-capacity ring buffer tracking typed characters. Supports exact and case-insensitive suffix matching, backspace, reset on boundary keys, and word-boundary lookbehind.
 - **`CGEventTapMonitor`** — system-wide keystroke capture via CGEventTap on a dedicated dispatch queue. Handles modifier keys (Option passes through for character composition), boundary keys, unicode extraction (4 UTF-16 code units for non-BMP support), `tapDisabledByTimeout`/`tapDisabledByUserInput` re-enablement. Manages its own retain via `Unmanaged` for lifetime safety.
 - **`UnicodeEventTextInjector`** — text injection via `CGEvent.keyboardSetUnicodeString`. No clipboard involvement — deletes the abbreviation with backspaces, then posts the expansion as a series of synthetic key events carrying Unicode string payloads.
-- **`SnippetStore`** (`SnippetStoring` protocol) — SwiftData CRUD + abbreviation/exclusion caches. **All UI mutations go through this store** so the engine's live caches stay in sync. Case-insensitive duplicate detection, batched usage-count writes, group management, exclusion management.
-- **`SettingsManager`** (`SettingsManaging` protocol) — UserDefaults-backed `@Observable` with launch-at-login via `SMAppService`.
+- **`SnippetStore`** (`SnippetStoring` protocol) — SwiftData CRUD + abbreviation/exclusion caches. **All UI mutations go through this store** so the engine's live caches stay in sync. Case-insensitive duplicate detection (enforced in the store — `@Attribute(.unique)` was removed for CloudKit compatibility), batched usage-count writes, group management, exclusion management.
+- **`SettingsManager`** (`SettingsManaging` protocol) — UserDefaults-backed `@Observable` with launch-at-login via `SMAppService` and an opt-in iCloud sync toggle (`iCloudSyncEnabled`). The setting is read at app launch and selects between `ModelConfiguration(cloudKitDatabase: .automatic)` and `.none`; changes require a relaunch.
 - **`ImportService`** — RFC 4180 CSV parser (quoted fields, escaped `""` quotes, embedded newlines, case-insensitive headers) and TextExpander `.textexpander` plist parser.
 - **`CaseTransform`** — detects ALL CAPS / Title Case from typed input, applies transform to expansion text.
 - **`PlaceholderResolver`** — resolves `{date}`, `{time}`, `{datetime}`, `{clipboard}`, `{cursor}` at expansion time.
 
 ## Testing
 
-88 tests across 6 files. Run with `make test`.
+89 tests across 6 files. Run with `make test`.
 
 | File | Tests | Covers |
 |------|-------|--------|
 | `KeystrokeBufferTests` | 21 | Ring buffer, matching, word boundary, longest match, unicode, overflow, backspace |
 | `ExpansionEngineTests` | 19 | Matching, word boundary, ambiguous prefixes, disable, case, backspace |
-| `SnippetStoreTests` | 20 | CRUD, search, groups, usage count, exclusions, duplicate-collision, staleness regression |
+| `SnippetStoreTests` | 21 | CRUD, search, groups, usage count, exclusions, duplicate-collision (store-level), staleness regression |
 | `ImportServiceTests` | 9 | CSV, escaped quotes, embedded newlines, case-insensitive headers, TextExpander plist |
 | `CaseTransformTests` | 10 | Detection + application of case patterns including preservation of existing caps |
 | `PlaceholderResolverTests` | 9 | Date/time, cursor offset, strip |
@@ -122,6 +122,7 @@ Keyed/
 ## Important notes
 
 - Sandbox is **disabled** — required for `CGEventTap`. Not App Store compatible. Direct download is the primary distribution channel.
+- **iCloud sync** is opt-in via Settings → Sync. Runtime requires a Developer ID-signed build with the iCloud/CloudKit entitlement and a CloudKit container configured on the team. Unsigned ad-hoc builds will log a CloudKit init failure and fall back to local storage automatically.
 - `LSUIElement = true` — menu bar app, no Dock icon.
 - macOS 14.0+ deployment target (SwiftData requirement).
 - Accessibility permission is mandatory. The app is non-functional without it.
