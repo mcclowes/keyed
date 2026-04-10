@@ -187,6 +187,83 @@ final class SnippetStoreTests: XCTestCase {
         XCTAssertEqual(store.allExclusions().count, 1)
     }
 
+    // MARK: - Pinned snippets
+
+    func test_newSnippet_defaultsToUnpinned() throws {
+        let snippet = try store.addSnippet(
+            abbreviation: ":email",
+            expansion: "test@example.com",
+            label: "",
+            groupID: nil
+        )
+        XCTAssertFalse(snippet.isPinned)
+    }
+
+    func test_setPinned_true_marksSnippetPinned() throws {
+        let snippet = try store.addSnippet(
+            abbreviation: ":email",
+            expansion: "test@example.com",
+            label: "",
+            groupID: nil
+        )
+        try store.setPinned(snippet, isPinned: true)
+        XCTAssertTrue(snippet.isPinned)
+    }
+
+    func test_setPinned_false_unmarksSnippet() throws {
+        let snippet = try store.addSnippet(
+            abbreviation: ":email",
+            expansion: "test@example.com",
+            label: "",
+            groupID: nil
+        )
+        try store.setPinned(snippet, isPinned: true)
+        try store.setPinned(snippet, isPinned: false)
+        XCTAssertFalse(snippet.isPinned)
+    }
+
+    func test_pinnedSnippets_returnsOnlyPinned() throws {
+        let pinned = try store.addSnippet(abbreviation: ":a", expansion: "aaa", label: "", groupID: nil)
+        _ = try store.addSnippet(abbreviation: ":b", expansion: "bbb", label: "", groupID: nil)
+        try store.setPinned(pinned, isPinned: true)
+
+        let result = store.pinnedSnippets()
+        XCTAssertEqual(result.count, 1)
+        XCTAssertEqual(result.first?.abbreviation, ":a")
+    }
+
+    func test_pinnedSnippets_preservesInsertionOrder() throws {
+        let first = try store.addSnippet(abbreviation: ":b", expansion: "x", label: "", groupID: nil)
+        let second = try store.addSnippet(abbreviation: ":a", expansion: "y", label: "", groupID: nil)
+        let third = try store.addSnippet(abbreviation: ":c", expansion: "z", label: "", groupID: nil)
+        try store.setPinned(first, isPinned: true)
+        try store.setPinned(second, isPinned: true)
+        try store.setPinned(third, isPinned: true)
+
+        let result = store.pinnedSnippets()
+        XCTAssertEqual(result.map(\.abbreviation), [":b", ":a", ":c"])
+    }
+
+    func test_deletePinnedSnippet_removesFromPinned() throws {
+        let snippet = try store.addSnippet(
+            abbreviation: ":email",
+            expansion: "test@example.com",
+            label: "",
+            groupID: nil
+        )
+        try store.setPinned(snippet, isPinned: true)
+        try store.deleteSnippet(snippet)
+        XCTAssertTrue(store.pinnedSnippets().isEmpty)
+    }
+
+    func test_setPinned_idempotent() throws {
+        let snippet = try store.addSnippet(abbreviation: ":a", expansion: "x", label: "", groupID: nil)
+        try store.setPinned(snippet, isPinned: true)
+        let firstOrder = snippet.pinnedSortOrder
+        try store.setPinned(snippet, isPinned: true)
+        XCTAssertEqual(snippet.pinnedSortOrder, firstOrder)
+    }
+
     // MARK: - Staleness (regression test for the unified-mutation bug)
 
     func test_deleteViaStore_removesFromAbbreviationMap() throws {

@@ -28,6 +28,14 @@ struct SnippetDetailView: View {
                     .frame(minHeight: 120)
             }
 
+            Section("Menu Bar") {
+                Toggle("Pin to Menu Bar", isOn: Binding(
+                    get: { snippet.isPinned },
+                    set: { togglePin(to: $0) }
+                ))
+                .help("Show this snippet in the menu bar popover for one-click insertion.")
+            }
+
             Section("Stats") {
                 LabeledContent("Used") {
                     Text("\(snippet.usageCount) times")
@@ -60,6 +68,15 @@ struct SnippetDetailView: View {
             try? await Task.sleep(for: .milliseconds(300))
             if Task.isCancelled { return }
             persist()
+        }
+    }
+
+    private func togglePin(to isPinned: Bool) {
+        do {
+            try store.setPinned(snippet, isPinned: isPinned)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 
