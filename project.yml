@@ -22,6 +22,9 @@ targets:
       - Keyed/Sources
     resources:
       - path: Keyed/Resources/Assets.xcassets
+    configFiles:
+      Debug: Keyed/Config/Keyed.xcconfig
+      Release: Keyed/Config/Keyed.xcconfig
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mcclowes.keyed
@@ -31,7 +34,6 @@ targets:
         CODE_SIGN_ENTITLEMENTS: Keyed/Resources/Keyed.entitlements
         GENERATE_INFOPLIST_FILE: false
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        CODE_SIGN_IDENTITY: "-"
 
   KeyedTests:
     type: bundle.unit-test

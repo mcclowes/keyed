@@ -25,6 +25,9 @@ Package.resolved
 .idea/
 .vscode/
 
+# Local developer signing override (see Keyed/Config/Keyed.local.xcconfig.example)
+Keyed/Config/Keyed.local.xcconfig
+
 # Distribution
 *.app
 *.ipa

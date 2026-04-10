@@ -1,0 +1,8 @@
+// Default build settings for Keyed.
+// Local overrides live in Keyed.local.xcconfig (gitignored).
+// See Keyed.local.xcconfig.example for the recommended dev-loop setup
+// that stops macOS from re-prompting for Accessibility on every rebuild.
+
+CODE_SIGN_IDENTITY = -
+
+#include? "Keyed.local.xcconfig"
