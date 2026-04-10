@@ -1,6 +1,9 @@
 import AppKit
 import Carbon
 import Foundation
+import OSLog
+
+private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "TextInjector")
 
 protocol TextInjecting: Sendable {
     func replaceText(abbreviationLength: Int, expansion: String, cursorOffset: Int?) async
@@ -12,70 +15,62 @@ extension TextInjecting {
     }
 }
 
-final class ClipboardTextInjector: TextInjecting, @unchecked Sendable {
-    private let pasteboard = NSPasteboard.general
-
+/// Inserts expansion text by deleting the abbreviation with backspaces then posting a
+/// synthetic key event that carries the expansion as a Unicode string payload.
+/// This avoids the clipboard entirely — no save/restore dance, no collisions with clipboard managers.
+final class UnicodeEventTextInjector: TextInjecting, @unchecked Sendable {
     func replaceText(abbreviationLength: Int, expansion: String, cursorOffset: Int?) async {
-        // Save current clipboard
-        let savedItems = savePasteboard()
+        guard abbreviationLength >= 0 else { return }
 
-        // Delete the abbreviation with backspaces
         for _ in 0..<abbreviationLength {
-            postKeyEvent(keyCode: UInt16(kVK_Delete), keyDown: true)
-            postKeyEvent(keyCode: UInt16(kVK_Delete), keyDown: false)
-            try? await Task.sleep(for: .milliseconds(5))
+            postKey(keyCode: UInt16(kVK_Delete))
         }
 
-        // Brief pause to let backspaces process
-        try? await Task.sleep(for: .milliseconds(20))
+        if !expansion.isEmpty {
+            postUnicodeString(expansion)
+        }
 
-        // Set expansion text on clipboard
-        pasteboard.clearContents()
-        pasteboard.setString(expansion, forType: .string)
-
-        // Paste via Cmd+V
-        postKeyEvent(keyCode: UInt16(kVK_ANSI_V), keyDown: true, flags: .maskCommand)
-        postKeyEvent(keyCode: UInt16(kVK_ANSI_V), keyDown: false, flags: .maskCommand)
-
-        // Wait for paste to complete
-        try? await Task.sleep(for: .milliseconds(100))
-
-        // Move cursor if needed
         if let offset = cursorOffset, offset > 0 {
-            try? await Task.sleep(for: .milliseconds(20))
             for _ in 0..<offset {
-                postKeyEvent(keyCode: UInt16(kVK_LeftArrow), keyDown: true)
-                postKeyEvent(keyCode: UInt16(kVK_LeftArrow), keyDown: false)
-                try? await Task.sleep(for: .milliseconds(3))
+                postKey(keyCode: UInt16(kVK_LeftArrow))
             }
         }
-
-        // Restore clipboard
-        try? await Task.sleep(for: .milliseconds(50))
-        restorePasteboard(savedItems)
     }
 
-    private func postKeyEvent(keyCode: UInt16, keyDown: Bool, flags: CGEventFlags = []) {
-        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: keyDown) else { return }
-        event.flags = flags
-        event.post(tap: .cghidEventTap)
+    private func postKey(keyCode: UInt16, flags: CGEventFlags = []) {
+        guard let down = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: true),
+              let up = CGEvent(keyboardEventSource: nil, virtualKey: keyCode, keyDown: false)
+        else {
+            logger.error("Failed to allocate CGEvent for keyCode \(keyCode)")
+            return
+        }
+        down.flags = flags
+        up.flags = flags
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
     }
 
-    private func savePasteboard() -> [NSPasteboardItem] {
-        pasteboard.pasteboardItems?.compactMap { item in
-            let saved = NSPasteboardItem()
-            for type in item.types {
-                if let data = item.data(forType: type) {
-                    saved.setData(data, forType: type)
-                }
+    /// Sends a string as a single keyboard event whose payload is the Unicode text.
+    /// Chunked to avoid hitting the 20-character limit some apps impose per event.
+    private func postUnicodeString(_ string: String) {
+        let chunkSize = 20
+        let utf16 = Array(string.utf16)
+        var index = 0
+        while index < utf16.count {
+            let end = min(index + chunkSize, utf16.count)
+            let chunk = Array(utf16[index..<end])
+            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true) else {
+                logger.error("Failed to allocate CGEvent for unicode string chunk")
+                return
             }
-            return saved
-        } ?? []
-    }
-
-    private func restorePasteboard(_ items: [NSPasteboardItem]) {
-        pasteboard.clearContents()
-        if items.isEmpty { return }
-        pasteboard.writeObjects(items)
+            chunk.withUnsafeBufferPointer { buffer in
+                event.keyboardSetUnicodeString(
+                    stringLength: buffer.count,
+                    unicodeString: buffer.baseAddress
+                )
+            }
+            event.post(tap: .cghidEventTap)
+            index = end
+        }
     }
 }

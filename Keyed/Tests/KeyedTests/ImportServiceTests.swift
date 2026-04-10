@@ -56,6 +56,30 @@ final class ImportServiceTests: XCTestCase {
         XCTAssertEqual(results[0].expansion, "123 Main St, Apt 4")
     }
 
+    func test_parseCSV_escapedQuotes_parsesCorrectly() throws {
+        let csv = "abbreviation,expansion\n:quote,\"He said \"\"hi\"\"\""
+        let results = try service.parseCSV(csv)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].expansion, "He said \"hi\"")
+    }
+
+    func test_parseCSV_embeddedNewlinesInQuotedField_preserved() throws {
+        let csv = "abbreviation,expansion\n:multi,\"line one\nline two\""
+        let results = try service.parseCSV(csv)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].expansion, "line one\nline two")
+    }
+
+    func test_parseCSV_caseInsensitiveHeader_accepted() throws {
+        let csv = """
+        Abbreviation,Expansion
+        :email,test@example.com
+        """
+        let results = try service.parseCSV(csv)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].abbreviation, ":email")
+    }
+
     // MARK: - TextExpander Plist Import
 
     func test_parseTextExpanderPlist_parsesSnippets() throws {

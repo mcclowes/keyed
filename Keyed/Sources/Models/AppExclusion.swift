@@ -4,7 +4,7 @@ import SwiftData
 @Model
 final class AppExclusion {
     var id: UUID
-    var bundleIdentifier: String
+    @Attribute(.unique) var bundleIdentifier: String
     var appName: String
 
     init(bundleIdentifier: String, appName: String) {

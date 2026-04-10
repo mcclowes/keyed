@@ -2,12 +2,13 @@ import SwiftUI
 import UniformTypeIdentifiers
 
 struct ImportView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
+    @Environment(SnippetStore.self) private var store
     @State private var importedSnippets: [ImportedSnippet] = []
     @State private var selectedIndices: Set<Int> = []
     @State private var errorMessage: String?
     @State private var hasLoaded = false
+    @State private var importSummary: String?
 
     private let importService = ImportService()
 
@@ -82,8 +83,11 @@ struct ImportView: View {
                         Toggle("", isOn: Binding(
                             get: { selectedIndices.contains(index) },
                             set: { isOn in
-                                if isOn { selectedIndices.insert(index) }
-                                else { selectedIndices.remove(index) }
+                                if isOn {
+                                    selectedIndices.insert(index)
+                                } else {
+                                    selectedIndices.remove(index)
+                                }
                             }
                         ))
                         .labelsHidden()
@@ -110,6 +114,13 @@ struct ImportView: View {
                 }
             }
 
+            if let importSummary {
+                Text(importSummary)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal)
+            }
+
             Divider()
 
             HStack {
@@ -120,7 +131,6 @@ struct ImportView: View {
                     .font(.caption)
                 Button("Import \(selectedIndices.count) Snippets") {
                     importSelected()
-                    dismiss()
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedIndices.isEmpty)
@@ -132,7 +142,7 @@ struct ImportView: View {
     private func openFilePicker() {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [
-            UTType(filenameExtension: "csv")!,
+            UTType(filenameExtension: "csv") ?? .commaSeparatedText,
             UTType(filenameExtension: "textexpander") ?? .data,
         ]
         panel.allowsMultipleSelection = false
@@ -141,7 +151,7 @@ struct ImportView: View {
         guard panel.runModal() == .OK, let url = panel.url else { return }
 
         do {
-            if url.pathExtension == "csv" {
+            if url.pathExtension.lowercased() == "csv" {
                 let content = try String(contentsOf: url, encoding: .utf8)
                 importedSnippets = try importService.parseCSV(content)
             } else {
@@ -156,33 +166,42 @@ struct ImportView: View {
     }
 
     private func importSelected() {
-        // Collect unique group names from selected snippets
         var groupMap: [String: UUID] = [:]
+        var imported = 0
+        var skipped = 0
+
+        for group in store.allGroups() {
+            groupMap[group.name.lowercased()] = group.id
+        }
 
         for index in selectedIndices.sorted() {
-            let imported = importedSnippets[index]
-
+            let item = importedSnippets[index]
             var groupID: UUID?
-            if let groupName = imported.groupName, !groupName.isEmpty {
-                if let existingID = groupMap[groupName] {
-                    groupID = existingID
-                } else {
-                    let group = SnippetGroup(name: groupName)
-                    modelContext.insert(group)
-                    groupMap[groupName] = group.id
+            if let groupName = item.groupName, !groupName.isEmpty {
+                if let existing = groupMap[groupName.lowercased()] {
+                    groupID = existing
+                } else if let group = try? store.addGroup(name: groupName) {
+                    groupMap[groupName.lowercased()] = group.id
                     groupID = group.id
                 }
             }
-
-            let snippet = Snippet(
-                abbreviation: imported.abbreviation,
-                expansion: imported.expansion,
-                label: imported.label,
-                groupID: groupID
-            )
-            modelContext.insert(snippet)
+            do {
+                _ = try store.addSnippet(
+                    abbreviation: item.abbreviation,
+                    expansion: item.expansion,
+                    label: item.label,
+                    groupID: groupID
+                )
+                imported += 1
+            } catch {
+                skipped += 1
+            }
         }
 
-        try? modelContext.save()
+        if skipped > 0 {
+            importSummary = "Imported \(imported), skipped \(skipped) duplicates."
+        } else {
+            dismiss()
+        }
     }
 }

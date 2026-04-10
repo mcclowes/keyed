@@ -19,6 +19,8 @@ struct KeyedApp: App {
         Settings {
             SettingsView()
                 .environment(appDelegate.settingsManager)
+                .environment(appDelegate.snippetStore)
+                .modelContainer(appDelegate.modelContainer)
         }
     }
 }
@@ -26,6 +28,7 @@ struct KeyedApp: App {
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
+    private var onboardingWindow: NSWindow?
     private(set) var expansionEngine: ExpansionEngine?
     private(set) var snippetStore: SnippetStore!
     let settingsManager = SettingsManager()
@@ -36,47 +39,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         do {
             modelContainer = try ModelContainer(for: Snippet.self, SnippetGroup.self, AppExclusion.self)
         } catch {
-            fatalError("Failed to create ModelContainer: \(error)")
+            // Fallback: reset the store if schema migration fails. Pre-1.0; no meaningful data loss risk yet.
+            logger
+                .error(
+                    "ModelContainer creation failed: \(error.localizedDescription, privacy: .public) — using in-memory fallback"
+                )
+            do {
+                let config = ModelConfiguration(isStoredInMemoryOnly: true)
+                modelContainer = try ModelContainer(
+                    for: Snippet.self, SnippetGroup.self, AppExclusion.self,
+                    configurations: config
+                )
+            } catch {
+                fatalError("Could not create any ModelContainer: \(error)")
+            }
         }
-        snippetStore = nil
         super.init()
         snippetStore = SnippetStore(modelContext: modelContainer.mainContext)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Set up status bar
-        statusBarController = StatusBarController(settingsManager: settingsManager, modelContainer: modelContainer)
+        statusBarController = StatusBarController(
+            settingsManager: settingsManager,
+            snippetStore: snippetStore
+        )
 
-        // Set up expansion engine
         let monitor = CGEventTapMonitor()
-        let injector = ClipboardTextInjector()
+        let injector = UnicodeEventTextInjector()
         let engine = ExpansionEngine(monitor: monitor, injector: injector)
         engine.updateAbbreviations(snippetStore.abbreviationMap)
+        engine.updateExcludedApps(snippetStore.excludedBundleIDs)
         engine.delegate = self
         expansionEngine = engine
 
-        // Only start if accessibility is trusted
         if accessibilityService.isTrusted() {
             engine.start()
         }
 
-        // Observe settings changes
-        observeSettings()
+        observeSettingsLoop()
+        observeAbbreviationsLoop()
+        observeExclusionsLoop()
+        observeAccessibilityChanges()
 
-        // Show onboarding on first launch
         if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
             showOnboarding()
         }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        snippetStore?.flushPendingWrites()
         expansionEngine?.stop()
     }
 
-    private func observeSettings() {
-        observeSettingsLoop()
-        observeSnippetsLoop()
-    }
+    // MARK: - Observers
 
     private func observeSettingsLoop() {
         withObservationTracking {
@@ -90,21 +105,43 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func observeSnippetsLoop() {
+    private func observeAbbreviationsLoop() {
         withObservationTracking {
             _ = snippetStore.abbreviationMap
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
                 self.expansionEngine?.updateAbbreviations(self.snippetStore.abbreviationMap)
+                self.observeAbbreviationsLoop()
+            }
+        }
+    }
 
-                // Also sync excluded apps
-                let descriptor = FetchDescriptor<AppExclusion>()
-                if let exclusions = try? self.modelContainer.mainContext.fetch(descriptor) {
-                    let bundleIDs = Set(exclusions.map(\.bundleIdentifier))
-                    self.expansionEngine?.updateExcludedApps(bundleIDs)
+    private func observeExclusionsLoop() {
+        withObservationTracking {
+            _ = snippetStore.excludedBundleIDs
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.expansionEngine?.updateExcludedApps(self.snippetStore.excludedBundleIDs)
+                self.observeExclusionsLoop()
+            }
+        }
+    }
+
+    private func observeAccessibilityChanges() {
+        DistributedNotificationCenter.default().addObserver(
+            forName: NSNotification.Name("com.apple.accessibility.api"),
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self else { return }
+                if self.accessibilityService.isTrusted() {
+                    self.expansionEngine?.start()
+                } else {
+                    self.expansionEngine?.stop()
                 }
-                self.observeSnippetsLoop()
             }
         }
     }
@@ -112,7 +149,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func showOnboarding() {
         let onboardingView = OnboardingView(accessibilityService: accessibilityService)
             .environment(settingsManager)
-            .modelContainer(modelContainer)
+            .environment(snippetStore)
 
         let controller = NSHostingController(rootView: onboardingView)
         let window = NSWindow(contentViewController: controller)
@@ -120,7 +157,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.styleMask = [.titled, .closable]
         window.setContentSize(NSSize(width: 480, height: 400))
         window.center()
+        window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
+        onboardingWindow = window
 
         UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
     }

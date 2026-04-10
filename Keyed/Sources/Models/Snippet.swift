@@ -4,7 +4,7 @@ import SwiftData
 @Model
 final class Snippet {
     var id: UUID
-    var abbreviation: String
+    @Attribute(.unique) var abbreviation: String
     var expansion: String
     var label: String
     var groupID: UUID?

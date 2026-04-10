@@ -34,11 +34,17 @@ final class CaseTransformTests: XCTestCase {
         XCTAssertEqual(CaseTransform.apply(.allUpper, to: "Best regards"), "BEST REGARDS")
     }
 
-    func test_apply_titleCase_capitalizesFirst() {
+    func test_apply_titleCase_capitalizesFirstLetterOnly() {
         XCTAssertEqual(CaseTransform.apply(.titleCase, to: "best regards"), "Best regards")
     }
 
-    func test_apply_titleCase_alreadyCapitalized_lowersRest() {
-        XCTAssertEqual(CaseTransform.apply(.titleCase, to: "BEST REGARDS"), "Best regards")
+    func test_apply_titleCase_preservesExistingCapsInRest() {
+        // Previously this lowercased everything after the first letter. That destroyed intentional
+        // capitalization like "Dr. Smith". Title case should only touch the first letter.
+        XCTAssertEqual(CaseTransform.apply(.titleCase, to: "dr. Smith"), "Dr. Smith")
+    }
+
+    func test_apply_titleCase_firstNonLetterStaysUnchanged() {
+        XCTAssertEqual(CaseTransform.apply(.titleCase, to: "$hello"), "$Hello")
     }
 }

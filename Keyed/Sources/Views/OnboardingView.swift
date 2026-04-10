@@ -2,7 +2,7 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.modelContext) private var modelContext
+    @Environment(SnippetStore.self) private var store
     let accessibilityService: AccessibilityService
     @State private var step: OnboardingStep = .welcome
     @State private var isTrusted = false
@@ -107,9 +107,9 @@ struct OnboardingView: View {
                 .foregroundStyle(.secondary)
 
             VStack(alignment: .leading, spacing: 8) {
-                starterRow(abbreviation: ":email", expansion: "your@email.com")
-                starterRow(abbreviation: ":sig", expansion: "Best regards,\nYour Name")
-                starterRow(abbreviation: ":date", expansion: "{date}")
+                starterRow(abbreviation: "::email", expansion: "your@email.com")
+                starterRow(abbreviation: "::sig", expansion: "Best regards,\nYour Name")
+                starterRow(abbreviation: "::date", expansion: "{date}")
             }
             .padding()
             .background(.quaternary, in: RoundedRectangle(cornerRadius: 8))
@@ -159,16 +159,30 @@ struct OnboardingView: View {
         }
     }
 
+    private struct StarterSnippet {
+        let abbreviation: String
+        let expansion: String
+        let label: String
+    }
+
     private func createStarterSnippets() {
-        let starters = [
-            ("::email", "your@email.com", "Email address"),
-            ("::sig", "Best regards,\nYour Name", "Email signature"),
-            ("::shrug", "¯\\_(ツ)_/¯", "Shrug"),
+        let starters: [StarterSnippet] = [
+            StarterSnippet(abbreviation: "::email", expansion: "your@email.com", label: "Email address"),
+            StarterSnippet(
+                abbreviation: "::sig",
+                expansion: "Best regards,\nYour Name",
+                label: "Email signature"
+            ),
+            StarterSnippet(abbreviation: "::date", expansion: "{date}", label: "Today's date"),
+            StarterSnippet(abbreviation: "::shrug", expansion: "¯\\_(ツ)_/¯", label: "Shrug"),
         ]
-        for (abbrev, expansion, label) in starters {
-            let snippet = Snippet(abbreviation: abbrev, expansion: expansion, label: label)
-            modelContext.insert(snippet)
+        for starter in starters {
+            _ = try? store.addSnippet(
+                abbreviation: starter.abbreviation,
+                expansion: starter.expansion,
+                label: starter.label,
+                groupID: nil
+            )
         }
-        try? modelContext.save()
     }
 }

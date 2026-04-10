@@ -1,12 +1,15 @@
 import Carbon
 import Cocoa
 import Foundation
+import OSLog
+
+private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "KeystrokeMonitor")
 
 enum KeystrokeEvent {
     case character(String)
     case backspace
-    case boundaryKey // arrow, tab, escape, mouse click — resets buffer
-    case modifiedKey // cmd/ctrl/option combo — ignored
+    case boundaryKey // arrow, tab, escape — resets buffer
+    case modifiedKey // cmd/ctrl combo — ignored
 }
 
 protocol KeystrokeMonitoring: AnyObject, Sendable {
@@ -15,50 +18,91 @@ protocol KeystrokeMonitoring: AnyObject, Sendable {
     func stop()
 }
 
+/// CGEventTap-based system keystroke capture.
+///
+/// Lifetime management: when `start()` succeeds, this object retains itself via an `Unmanaged`
+/// passed to the C callback. `stop()` releases that retain after tearing down the tap.
 final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
+    private let stateLock = NSLock()
     private var eventTap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
     private var monitorQueue: DispatchQueue?
     private var runLoop: CFRunLoop?
-    private let lock = NSLock()
+    private var retainedSelf: Unmanaged<CGEventTapMonitor>?
 
-    var onKeystroke: (@Sendable (KeystrokeEvent) -> Void)?
+    private var _onKeystroke: (@Sendable (KeystrokeEvent) -> Void)?
+    var onKeystroke: (@Sendable (KeystrokeEvent) -> Void)? {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _onKeystroke
+        }
+        set {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            _onKeystroke = newValue
+        }
+    }
 
     func start() {
+        stateLock.lock()
+        if eventTap != nil {
+            stateLock.unlock()
+            return
+        }
+        let retained = Unmanaged.passRetained(self)
+        retainedSelf = retained
+        stateLock.unlock()
+
         let queue = DispatchQueue(label: "com.mcclowes.keyed.eventtap", qos: .userInteractive)
+
+        stateLock.lock()
         monitorQueue = queue
+        stateLock.unlock()
 
-        queue.async { [weak self] in
-            guard let self else { return }
+        queue.async {
+            let eventMask: CGEventMask =
+                (1 << CGEventType.keyDown.rawValue) |
+                (1 << CGEventType.tapDisabledByTimeout.rawValue) |
+                (1 << CGEventType.tapDisabledByUserInput.rawValue)
 
-            let eventMask: CGEventMask = (1 << CGEventType.keyDown.rawValue)
-
-            let unmanagedSelf = Unmanaged.passUnretained(self)
             guard let tap = CGEvent.tapCreate(
                 tap: .cgSessionEventTap,
                 place: .headInsertEventTap,
                 options: .defaultTap,
                 eventsOfInterest: eventMask,
-                callback: { _, _, event, userInfo -> Unmanaged<CGEvent>? in
+                callback: { _, type, event, userInfo -> Unmanaged<CGEvent>? in
                     guard let userInfo else { return Unmanaged.passRetained(event) }
                     let monitor = Unmanaged<CGEventTapMonitor>.fromOpaque(userInfo).takeUnretainedValue()
-                    monitor.handleEvent(event)
+                    monitor.handleCallback(type: type, event: event)
                     return Unmanaged.passRetained(event)
                 },
-                userInfo: unmanagedSelf.toOpaque()
+                userInfo: retained.toOpaque()
             ) else {
+                logger.error("Failed to create event tap — accessibility permission likely missing")
+                self.stateLock.lock()
+                self.retainedSelf = nil
+                self.monitorQueue = nil
+                self.stateLock.unlock()
+                retained.release()
                 return
             }
 
             guard let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0) else {
+                CGEvent.tapEnable(tap: tap, enable: false)
+                self.stateLock.lock()
+                self.retainedSelf = nil
+                self.monitorQueue = nil
+                self.stateLock.unlock()
+                retained.release()
                 return
             }
 
-            lock.lock()
-            eventTap = tap
-            runLoopSource = source
-            runLoop = CFRunLoopGetCurrent()
-            lock.unlock()
+            self.stateLock.lock()
+            self.eventTap = tap
+            self.runLoopSource = source
+            self.runLoop = CFRunLoopGetCurrent()
+            self.stateLock.unlock()
 
             CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
             CGEvent.tapEnable(tap: tap, enable: true)
@@ -67,40 +111,62 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
     }
 
     func stop() {
-        lock.lock()
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-        }
-        if let runLoopSource, let runLoop {
-            CFRunLoopRemoveSource(runLoop, runLoopSource, .commonModes)
-            CFRunLoopStop(runLoop)
-        }
+        stateLock.lock()
+        let tap = eventTap
+        let source = runLoopSource
+        let loop = runLoop
+        let retained = retainedSelf
         eventTap = nil
         runLoopSource = nil
         runLoop = nil
-        lock.unlock()
+        monitorQueue = nil
+        retainedSelf = nil
+        stateLock.unlock()
+
+        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+        if let source, let loop {
+            CFRunLoopRemoveSource(loop, source, .commonModes)
+            CFRunLoopStop(loop)
+        }
+        retained?.release()
     }
 
-    private func handleEvent(_ event: CGEvent) {
+    fileprivate func handleCallback(type: CGEventType, event: CGEvent) {
+        switch type {
+        case .tapDisabledByTimeout, .tapDisabledByUserInput:
+            logger.notice("Event tap disabled (type=\(type.rawValue)) — re-enabling")
+            stateLock.lock()
+            let tap = eventTap
+            stateLock.unlock()
+            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            return
+        case .keyDown:
+            handleKeyDown(event)
+        default:
+            break
+        }
+    }
+
+    private func handleKeyDown(_ event: CGEvent) {
         let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
         let flags = event.flags
 
-        // Ignore if modifier keys (Cmd, Ctrl, Option) are held — these are shortcuts
-        let modifierMask: CGEventFlags = [.maskCommand, .maskControl, .maskAlternate]
-        if !flags.intersection(modifierMask).isEmpty {
+        // Only treat Command and Control as "this is a shortcut, ignore it."
+        // Option is legitimately used for character composition on many layouts.
+        let shortcutMask: CGEventFlags = [.maskCommand, .maskControl]
+        if !flags.isDisjoint(with: shortcutMask) {
             onKeystroke?(.modifiedKey)
             return
         }
 
-        // Backspace
-        if keyCode == kVK_Delete {
+        if keyCode == kVK_Delete || keyCode == kVK_ForwardDelete {
             onKeystroke?(.backspace)
             return
         }
 
-        // Boundary keys — reset the buffer
         let boundaryKeys: Set<Int64> = [
-            Int64(kVK_Return), Int64(kVK_Tab), Int64(kVK_Escape),
+            Int64(kVK_Return), Int64(kVK_ANSI_KeypadEnter),
+            Int64(kVK_Tab), Int64(kVK_Escape),
             Int64(kVK_LeftArrow), Int64(kVK_RightArrow),
             Int64(kVK_UpArrow), Int64(kVK_DownArrow),
             Int64(kVK_Home), Int64(kVK_End),
@@ -111,18 +177,18 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
             return
         }
 
-        // Extract the unicode character
-        var unicodeLength = 1
-        var unicodeChar: [UniChar] = [0]
+        // Read up to 4 UTF-16 code units so we pick up surrogate pairs for non-BMP characters.
+        var unicodeLength = 0
+        var unicodeChars: [UniChar] = [0, 0, 0, 0]
         event.keyboardGetUnicodeString(
-            maxStringLength: 1,
+            maxStringLength: 4,
             actualStringLength: &unicodeLength,
-            unicodeString: &unicodeChar
+            unicodeString: &unicodeChars
         )
 
         guard unicodeLength > 0 else { return }
 
-        let character = String(utf16CodeUnits: unicodeChar, count: Int(unicodeLength))
+        let character = String(utf16CodeUnits: unicodeChars, count: Int(unicodeLength))
         guard !character.isEmpty else { return }
 
         onKeystroke?(.character(character))

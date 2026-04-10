@@ -10,10 +10,14 @@ protocol ExpansionEngineDelegate: AnyObject {
 }
 
 @MainActor
-final class ExpansionEngine: @unchecked Sendable {
+final class ExpansionEngine {
     private var buffer: KeystrokeBuffer
     private let monitor: KeystrokeMonitoring
     private let injector: TextInjecting
+    private let placeholderResolver = PlaceholderResolver()
+
+    /// Abbreviations sorted by descending length so the first-matching suffix is always the longest.
+    private var sortedAbbreviations: [String] = []
     private var abbreviationMap: [String: String] = [:]
     private var excludedBundleIDs: Set<String> = []
     private var isExpanding = false
@@ -33,6 +37,7 @@ final class ExpansionEngine: @unchecked Sendable {
 
     func updateAbbreviations(_ map: [String: String]) {
         abbreviationMap = map
+        sortedAbbreviations = map.keys.sorted { $0.count > $1.count }
     }
 
     func updateExcludedApps(_ bundleIDs: Set<String>) {
@@ -47,11 +52,12 @@ final class ExpansionEngine: @unchecked Sendable {
     }
 
     func start() {
-        monitor.onKeystroke = { [weak self] event in
-            Task { @MainActor in
+        let handler: @Sendable (KeystrokeEvent) -> Void = { [weak self] event in
+            Task { @MainActor [weak self] in
                 self?.handleKeystroke(event)
             }
         }
+        monitor.onKeystroke = handler
         monitor.start()
         logger.info("Expansion engine started")
     }
@@ -66,7 +72,6 @@ final class ExpansionEngine: @unchecked Sendable {
     private func handleKeystroke(_ event: KeystrokeEvent) {
         guard isEnabled, !isExpanding else { return }
 
-        // Check if frontmost app is excluded
         if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
            excludedBundleIDs.contains(bundleID)
         {
@@ -90,37 +95,26 @@ final class ExpansionEngine: @unchecked Sendable {
     }
 
     private func checkForMatch() {
-        let abbreviations = Set(abbreviationMap.keys)
-
-        // Try exact match first, then case-insensitive
-        let matched: String
-        if let exact = buffer.firstMatch(from: abbreviations) {
-            matched = exact
-        } else if let caseInsensitive = buffer.firstMatchCaseInsensitive(from: abbreviations) {
-            matched = caseInsensitive
-        } else {
-            return
-        }
-
+        guard let matched = buffer.longestSuffixMatch(in: sortedAbbreviations) else { return }
         guard let expansion = abbreviationMap[matched] else { return }
+        guard buffer.hasWordBoundaryBefore(suffixLength: matched.count) else { return }
 
-        // Detect case pattern from what was actually typed
         let typed = buffer.typedSuffix(length: matched.count)
         let casePattern = CaseTransform.detect(typed: typed, abbreviation: matched)
         let caseExpansion = CaseTransform.apply(casePattern, to: expansion)
 
-        // Resolve placeholders
-        let resolver = PlaceholderResolver()
-        let cursorOffset = resolver.cursorOffset(in: caseExpansion)
-        let resolvedExpansion = resolver.resolve(resolver.stripCursorPlaceholder(caseExpansion))
+        let cursorOffset = placeholderResolver.cursorOffset(in: caseExpansion)
+        let resolvedExpansion = placeholderResolver.resolve(placeholderResolver.stripCursorPlaceholder(caseExpansion))
 
-        logger.info("Expanding '\(matched)' → \(resolvedExpansion.prefix(50))...")
+        logger.info("Expanding \(matched.count, privacy: .public) char abbreviation")
         isExpanding = true
         buffer.reset()
 
-        Task {
+        let matchedCharCount = matched.count
+        Task { [weak self] in
+            guard let self else { return }
             await injector.replaceText(
-                abbreviationLength: matched.count,
+                abbreviationLength: matchedCharCount,
                 expansion: resolvedExpansion,
                 cursorOffset: cursorOffset
             )
@@ -131,9 +125,9 @@ final class ExpansionEngine: @unchecked Sendable {
         }
     }
 
-    // MARK: - Testing support
-
-    func handleKeystrokeForTesting(_ event: KeystrokeEvent) {
-        handleKeystroke(event)
-    }
+    #if DEBUG
+        func handleKeystrokeForTesting(_ event: KeystrokeEvent) {
+            handleKeystroke(event)
+        }
+    #endif
 }

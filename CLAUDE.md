@@ -44,7 +44,7 @@ Keyed/
       ExpansionEngine.swift               # Orchestrates monitor + buffer + injector
       KeystrokeBuffer.swift               # Ring buffer for typed character tracking
       KeystrokeMonitor.swift              # CGEventTap-based system-wide keystroke capture
-      TextInjector.swift                  # Clipboard-based text replacement + cursor positioning
+      TextInjector.swift                  # Unicode-event text injection + cursor positioning
       AccessibilityService.swift          # AXIsProcessTrusted check/request
       SnippetStore.swift                  # SwiftData CRUD + abbreviation map
       SettingsManager.swift               # UserDefaults-backed @Observable
@@ -77,28 +77,28 @@ Keyed/
 
 ## Key modules
 
-- **`ExpansionEngine`** — orchestrates keystroke monitoring + abbreviation matching + text injection. Case-insensitive matching with case-aware expansion. Placeholder resolution. App exclusions. `isExpanding` guard prevents feedback loops.
-- **`KeystrokeBuffer`** — fixed-capacity ring buffer tracking typed characters. Supports exact and case-insensitive suffix matching, backspace, and reset on boundary keys.
-- **`CGEventTapMonitor`** — system-wide keystroke capture via CGEventTap on a dedicated dispatch queue. Handles modifier keys, boundary keys, unicode extraction.
-- **`ClipboardTextInjector`** — clipboard-based text replacement: save clipboard, inject backspaces, set expansion, Cmd+V paste, move cursor if needed, restore clipboard.
-- **`SnippetStore`** (`SnippetStoring` protocol) — SwiftData CRUD + abbreviation map generation. Duplicate detection, usage counting, group management.
+- **`ExpansionEngine`** — orchestrates keystroke monitoring + abbreviation matching + text injection. Case-insensitive matching with case-aware expansion, word-boundary enforcement (no mid-word expansion), cached abbreviation list. Placeholder resolution. App exclusions. `isExpanding` guard prevents feedback loops.
+- **`KeystrokeBuffer`** — fixed-capacity ring buffer tracking typed characters. Supports exact and case-insensitive suffix matching, backspace, reset on boundary keys, and word-boundary lookbehind.
+- **`CGEventTapMonitor`** — system-wide keystroke capture via CGEventTap on a dedicated dispatch queue. Handles modifier keys (Option passes through for character composition), boundary keys, unicode extraction (4 UTF-16 code units for non-BMP support), `tapDisabledByTimeout`/`tapDisabledByUserInput` re-enablement. Manages its own retain via `Unmanaged` for lifetime safety.
+- **`UnicodeEventTextInjector`** — text injection via `CGEvent.keyboardSetUnicodeString`. No clipboard involvement — deletes the abbreviation with backspaces, then posts the expansion as a series of synthetic key events carrying Unicode string payloads.
+- **`SnippetStore`** (`SnippetStoring` protocol) — SwiftData CRUD + abbreviation/exclusion caches. **All UI mutations go through this store** so the engine's live caches stay in sync. Case-insensitive duplicate detection, batched usage-count writes, group management, exclusion management.
 - **`SettingsManager`** (`SettingsManaging` protocol) — UserDefaults-backed `@Observable` with launch-at-login via `SMAppService`.
-- **`ImportService`** — CSV parser (handles quoted fields) and TextExpander `.textexpander` plist parser.
+- **`ImportService`** — RFC 4180 CSV parser (quoted fields, escaped `""` quotes, embedded newlines, case-insensitive headers) and TextExpander `.textexpander` plist parser.
 - **`CaseTransform`** — detects ALL CAPS / Title Case from typed input, applies transform to expansion text.
 - **`PlaceholderResolver`** — resolves `{date}`, `{time}`, `{datetime}`, `{clipboard}`, `{cursor}` at expansion time.
 
 ## Testing
 
-66 tests across 7 files. Run with `make test`.
+88 tests across 6 files. Run with `make test`.
 
 | File | Tests | Covers |
 |------|-------|--------|
-| `KeystrokeBufferTests` | 14 | Ring buffer, matching, overflow, backspace |
-| `ExpansionEngineTests` | 17 | Matching, disable, boundary, case, backspace |
-| `SnippetStoreTests` | 13 | CRUD, search, groups, usage count |
-| `ImportServiceTests` | 6 | CSV, quoted fields, TextExpander plist |
-| `CaseTransformTests` | 9 | Detection + application of case patterns |
-| `PlaceholderResolverTests` | 7 | Date/time, cursor offset, strip |
+| `KeystrokeBufferTests` | 21 | Ring buffer, matching, word boundary, longest match, unicode, overflow, backspace |
+| `ExpansionEngineTests` | 19 | Matching, word boundary, ambiguous prefixes, disable, case, backspace |
+| `SnippetStoreTests` | 20 | CRUD, search, groups, usage count, exclusions, duplicate-collision, staleness regression |
+| `ImportServiceTests` | 9 | CSV, escaped quotes, embedded newlines, case-insensitive headers, TextExpander plist |
+| `CaseTransformTests` | 10 | Detection + application of case patterns including preservation of existing caps |
+| `PlaceholderResolverTests` | 9 | Date/time, cursor offset, strip |
 
 **Mock pattern**: All mocks in `Mocks.swift`. Protocol-based. `MockKeystrokeMonitor`, `MockTextInjector`, `MockAccessibilityService`.
 **SwiftData tests**: Use `ModelConfiguration(isStoredInMemoryOnly: true)`.

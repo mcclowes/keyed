@@ -25,10 +25,7 @@ final class ExpansionEngineTests: XCTestCase {
 
     func test_typingAbbreviation_triggersExpansion() async {
         typeString(":email")
-
-        // Allow async expansion to complete
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
         XCTAssertEqual(injector.replaceTextCalls.first?.abbreviationLength, 6)
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "test@example.com")
@@ -36,18 +33,53 @@ final class ExpansionEngineTests: XCTestCase {
 
     func test_typingNonAbbreviation_doesNotTrigger() async {
         typeString("hello")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
     }
 
     func test_partialAbbreviation_doesNotTrigger() async {
         typeString(":ema")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
+    }
+
+    // MARK: - Word boundary
+
+    func test_abbreviationInsideWord_doesNotExpand() async {
+        // ":email" sits after "a" (a letter). No word boundary before ":", so no expansion.
+        // (Abbreviation starts with ":" which is itself non-alphanumeric, so the preceding char matters.)
+        engine.updateAbbreviations(["foo": "bar"])
+        typeString("xfoo")
+        await waitForInjector()
+        XCTAssertTrue(injector.replaceTextCalls.isEmpty)
+    }
+
+    func test_abbreviationAfterSpace_expands() async {
+        engine.updateAbbreviations(["foo": "bar"])
+        typeString("x foo")
+        await waitForInjector()
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+    }
+
+    func test_abbreviationAtBufferStart_expands() async {
+        engine.updateAbbreviations(["foo": "bar"])
+        typeString("foo")
+        await waitForInjector()
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+    }
+
+    // MARK: - Ambiguous prefixes
+
+    /// Without boundary-triggered expansion, the engine fires as soon as any suffix matches.
+    /// So when both ":sig" and ":signature" exist, ":sig" fires before the user can finish
+    /// typing ":signature". True longest-match would need the engine to wait for a terminator.
+    /// Documenting current behavior here as a regression guard.
+    func test_ambiguousAbbreviations_shorterFiresFirst() async {
+        engine.updateAbbreviations([":sig": "short", ":signature": "long"])
+        typeString(":sig")
+        await waitForInjector()
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "short")
     }
 
     // MARK: - Disabled state
@@ -55,9 +87,7 @@ final class ExpansionEngineTests: XCTestCase {
     func test_disabled_doesNotExpand() async {
         engine.setEnabled(false)
         typeString(":email")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
     }
 
@@ -65,9 +95,7 @@ final class ExpansionEngineTests: XCTestCase {
         engine.setEnabled(false)
         engine.setEnabled(true)
         typeString(":email")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
     }
 
@@ -77,9 +105,7 @@ final class ExpansionEngineTests: XCTestCase {
         typeString(":ema")
         engine.handleKeystrokeForTesting(.boundaryKey)
         typeString("il")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
     }
 
@@ -89,22 +115,17 @@ final class ExpansionEngineTests: XCTestCase {
         typeString(":emai")
         engine.handleKeystrokeForTesting(.modifiedKey)
         typeString("l")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
     }
 
     // MARK: - Backspace
 
     func test_backspace_removesFromBuffer() async {
-        // Type something that doesn't match, backspace, then complete differently
         typeString(":emaix")
-        engine.handleKeystrokeForTesting(.backspace) // removes "x" -> ":emai"
-        typeString("l") // -> ":email" which should match
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        engine.handleKeystrokeForTesting(.backspace)
+        typeString("l")
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "test@example.com")
     }
@@ -112,7 +133,6 @@ final class ExpansionEngineTests: XCTestCase {
     // MARK: - Monitor lifecycle
 
     func test_start_callsMonitorStart() {
-        // setUp already called start
         XCTAssertEqual(monitor.startCallCount, 1)
     }
 
@@ -126,9 +146,7 @@ final class ExpansionEngineTests: XCTestCase {
     func test_updateAbbreviations_newMapTakesPrecedence() async {
         engine.updateAbbreviations([":hi": "Hello there!"])
         typeString(":hi")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "Hello there!")
     }
@@ -136,9 +154,7 @@ final class ExpansionEngineTests: XCTestCase {
     func test_updateAbbreviations_oldAbbreviationsNoLongerWork() async {
         engine.updateAbbreviations([":hi": "Hello there!"])
         typeString(":email")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
     }
 
@@ -146,9 +162,7 @@ final class ExpansionEngineTests: XCTestCase {
 
     func test_allCapsAbbreviation_expandsInAllCaps() async {
         typeString(":EMAIL")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "TEST@EXAMPLE.COM")
     }
@@ -156,18 +170,14 @@ final class ExpansionEngineTests: XCTestCase {
     func test_titleCaseAbbreviation_expandsInTitleCase() async {
         engine.updateAbbreviations([":sig": "best regards"])
         typeString(":Sig")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "Best regards")
     }
 
     func test_lowercaseAbbreviation_expandsAsIs() async {
         typeString(":email")
-
-        try? await Task.sleep(for: .milliseconds(50))
-
+        await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "test@example.com")
     }
@@ -177,6 +187,13 @@ final class ExpansionEngineTests: XCTestCase {
     private func typeString(_ text: String) {
         for char in text {
             engine.handleKeystrokeForTesting(.character(String(char)))
+        }
+    }
+
+    private func waitForInjector() async {
+        // Give the expansion Task a couple of runloop ticks to flush through the MainActor.
+        for _ in 0..<5 {
+            await Task.yield()
         }
     }
 }

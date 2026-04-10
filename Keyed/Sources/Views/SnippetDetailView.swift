@@ -1,19 +1,29 @@
 import SwiftUI
 
 struct SnippetDetailView: View {
-    @Bindable var snippet: Snippet
-    @Environment(\.modelContext) private var modelContext
+    let snippet: Snippet
+    @Environment(SnippetStore.self) private var store
+    @State private var abbreviation: String = ""
+    @State private var expansion: String = ""
+    @State private var label: String = ""
+    @State private var errorMessage: String?
+    @State private var saveTask: Task<Void, Never>?
 
     var body: some View {
         Form {
             Section("Trigger") {
-                TextField("Abbreviation", text: $snippet.abbreviation)
+                TextField("Abbreviation", text: $abbreviation)
                     .font(.system(.body, design: .monospaced))
-                TextField("Label (optional)", text: $snippet.label)
+                TextField("Label (optional)", text: $label)
+                if let errorMessage {
+                    Text(errorMessage)
+                        .foregroundStyle(.red)
+                        .font(.caption)
+                }
             }
 
             Section("Expansion") {
-                TextEditor(text: $snippet.expansion)
+                TextEditor(text: $expansion)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 120)
             }
@@ -31,7 +41,44 @@ struct SnippetDetailView: View {
             }
         }
         .formStyle(.grouped)
-        .onChange(of: snippet.abbreviation) { snippet.updatedAt = .now }
-        .onChange(of: snippet.expansion) { snippet.updatedAt = .now }
+        .onAppear { loadFromSnippet() }
+        .onChange(of: snippet.persistentModelID) { _, _ in loadFromSnippet() }
+        .onChange(of: abbreviation) { _, _ in scheduleSave() }
+        .onChange(of: expansion) { _, _ in scheduleSave() }
+        .onChange(of: label) { _, _ in scheduleSave() }
+    }
+
+    private func loadFromSnippet() {
+        abbreviation = snippet.abbreviation
+        expansion = snippet.expansion
+        label = snippet.label
+    }
+
+    private func scheduleSave() {
+        saveTask?.cancel()
+        saveTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(300))
+            if Task.isCancelled { return }
+            persist()
+        }
+    }
+
+    private func persist() {
+        let trimmed = abbreviation.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            errorMessage = "Abbreviation cannot be empty."
+            return
+        }
+        do {
+            try store.updateSnippet(
+                snippet,
+                abbreviation: trimmed == snippet.abbreviation ? nil : trimmed,
+                expansion: expansion == snippet.expansion ? nil : expansion,
+                label: label == snippet.label ? nil : label
+            )
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

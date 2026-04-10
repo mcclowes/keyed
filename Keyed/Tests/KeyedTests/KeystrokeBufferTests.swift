@@ -94,6 +94,70 @@ final class KeystrokeBufferTests: XCTestCase {
         XCTAssertNil(buffer.firstMatch(from: abbreviations))
     }
 
+    // MARK: - Longest match
+
+    func test_longestMatch_prefersLongerCandidate() {
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in ":signature" {
+            buffer.append(String(char))
+        }
+        // Passed in descending-length order, as the engine does.
+        let sorted = [":signature", ":sig"]
+        XCTAssertEqual(buffer.longestSuffixMatch(in: sorted), ":signature")
+    }
+
+    func test_longestMatch_fallsBackToCaseInsensitive() {
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in ":EMAIL" {
+            buffer.append(String(char))
+        }
+        XCTAssertEqual(buffer.longestSuffixMatch(in: [":email"]), ":email")
+    }
+
+    // MARK: - Word boundary
+
+    func test_wordBoundary_atStartOfBuffer_returnsTrue() {
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in "foo" {
+            buffer.append(String(char))
+        }
+        XCTAssertTrue(buffer.hasWordBoundaryBefore(suffixLength: 3))
+    }
+
+    func test_wordBoundary_afterLetter_returnsFalse() {
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in "xfoo" {
+            buffer.append(String(char))
+        }
+        XCTAssertFalse(buffer.hasWordBoundaryBefore(suffixLength: 3))
+    }
+
+    func test_wordBoundary_afterSpace_returnsTrue() {
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in "x foo" {
+            buffer.append(String(char))
+        }
+        XCTAssertTrue(buffer.hasWordBoundaryBefore(suffixLength: 3))
+    }
+
+    func test_wordBoundary_afterPunctuation_returnsTrue() {
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in "hello.foo" {
+            buffer.append(String(char))
+        }
+        XCTAssertTrue(buffer.hasWordBoundaryBefore(suffixLength: 3))
+    }
+
+    // MARK: - Unicode
+
+    func test_unicode_nonAscii_matches() {
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in ":café" {
+            buffer.append(String(char))
+        }
+        XCTAssertTrue(buffer.hasSuffix(":café"))
+    }
+
     // MARK: - Reset
 
     func test_reset_clearsBuffer() {

@@ -4,17 +4,16 @@ import SwiftUI
 
 @MainActor
 final class StatusBarController {
-    private var statusItem: NSStatusItem
-    private var popover: NSPopover
-    private nonisolated(unsafe) var eventMonitor: Any?
+    private let statusItem: NSStatusItem
+    private let popover: NSPopover
 
-    init(settingsManager: SettingsManager, modelContainer: ModelContainer) {
+    init(settingsManager: SettingsManager, snippetStore: SnippetStore) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         popover = NSPopover()
 
         let popoverView = MenuBarPopoverView()
             .environment(settingsManager)
-            .modelContainer(modelContainer)
+            .environment(snippetStore)
 
         popover.contentSize = NSSize(width: 240, height: 200)
         popover.behavior = .transient
@@ -24,18 +23,6 @@ final class StatusBarController {
             button.image = NSImage(systemSymbolName: "keyboard", accessibilityDescription: "Keyed")
             button.action = #selector(togglePopover)
             button.target = self
-        }
-
-        eventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
-            if let self, popover.isShown {
-                popover.performClose(nil)
-            }
-        }
-    }
-
-    deinit {
-        if let eventMonitor {
-            NSEvent.removeMonitor(eventMonitor)
         }
     }
 

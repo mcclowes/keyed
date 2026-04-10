@@ -2,9 +2,10 @@ import SwiftData
 import SwiftUI
 
 struct ExclusionSettingsView: View {
-    @Environment(\.modelContext) private var modelContext
+    @Environment(SnippetStore.self) private var store
     @Query(sort: \AppExclusion.appName) private var exclusions: [AppExclusion]
     @State private var showingAppPicker = false
+    @State private var errorMessage: String?
 
     var body: some View {
         Form {
@@ -26,12 +27,12 @@ struct ExclusionSettingsView: View {
                             }
                             Spacer()
                             Button(role: .destructive) {
-                                modelContext.delete(exclusion)
-                                try? modelContext.save()
+                                removeExclusion(exclusion)
                             } label: {
                                 Image(systemName: "trash")
                             }
                             .buttonStyle(.borderless)
+                            .help("Remove exclusion")
                         }
                     }
                 }
@@ -49,10 +50,32 @@ struct ExclusionSettingsView: View {
         .formStyle(.grouped)
         .sheet(isPresented: $showingAppPicker) {
             RunningAppPickerView(existingBundleIDs: Set(exclusions.map(\.bundleIdentifier))) { app in
-                let exclusion = AppExclusion(bundleIdentifier: app.bundleIdentifier, appName: app.name)
-                modelContext.insert(exclusion)
-                try? modelContext.save()
+                addExclusion(bundleID: app.bundleIdentifier, name: app.name)
             }
+        }
+        .alert("Error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func addExclusion(bundleID: String, name: String) {
+        do {
+            _ = try store.addExclusion(bundleIdentifier: bundleID, appName: name)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeExclusion(_ exclusion: AppExclusion) {
+        do {
+            try store.removeExclusion(exclusion)
+        } catch {
+            errorMessage = error.localizedDescription
         }
     }
 

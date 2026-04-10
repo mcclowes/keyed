@@ -11,52 +11,34 @@ struct ImportService {
     // MARK: - CSV
 
     func parseCSV(_ content: String) throws -> [ImportedSnippet] {
-        let lines = content.components(separatedBy: .newlines)
-            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
-        guard lines.count > 1 else { return [] }
+        let rows = CSVTokenizer.rows(in: content)
+        guard let header = rows.first else { return [] }
 
-        let header = parseCSVLine(lines[0])
-        let abbrevIndex = header.firstIndex(of: "abbreviation")
-        let expansionIndex = header.firstIndex(of: "expansion")
-
-        guard let abbrevIndex, let expansionIndex else {
+        let lowered = header.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }
+        guard let abbrevIndex = lowered.firstIndex(of: "abbreviation"),
+              let expansionIndex = lowered.firstIndex(of: "expansion")
+        else {
             throw ImportError.missingRequiredColumns
         }
+        let labelIndex = lowered.firstIndex(of: "label")
+        let groupIndex = lowered.firstIndex(of: "group")
 
-        let labelIndex = header.firstIndex(of: "label")
-        let groupIndex = header.firstIndex(of: "group")
-
-        return lines.dropFirst().compactMap { line in
-            let fields = parseCSVLine(line)
-            guard fields.count > max(abbrevIndex, expansionIndex) else { return nil }
-            let abbreviation = fields[abbrevIndex]
-            let expansion = fields[expansionIndex]
-            guard !abbreviation.isEmpty else { return nil }
-
-            let label = labelIndex.flatMap { $0 < fields.count ? fields[$0] : nil } ?? ""
-            let groupName = groupIndex.flatMap { $0 < fields.count ? fields[$0] : nil }
-
-            return ImportedSnippet(abbreviation: abbreviation, expansion: expansion, label: label, groupName: groupName)
+        var imported: [ImportedSnippet] = []
+        for row in rows.dropFirst() {
+            guard row.count > max(abbrevIndex, expansionIndex) else { continue }
+            let abbreviation = row[abbrevIndex]
+            let expansion = row[expansionIndex]
+            guard !abbreviation.isEmpty else { continue }
+            let label = labelIndex.flatMap { $0 < row.count ? row[$0] : nil } ?? ""
+            let groupName = groupIndex.flatMap { $0 < row.count ? row[$0] : nil }
+            imported.append(ImportedSnippet(
+                abbreviation: abbreviation,
+                expansion: expansion,
+                label: label,
+                groupName: groupName
+            ))
         }
-    }
-
-    private func parseCSVLine(_ line: String) -> [String] {
-        var fields: [String] = []
-        var current = ""
-        var inQuotes = false
-
-        for char in line {
-            if char == "\"" {
-                inQuotes.toggle()
-            } else if char == ",", !inQuotes {
-                fields.append(current.trimmingCharacters(in: .whitespaces))
-                current = ""
-            } else {
-                current.append(char)
-            }
-        }
-        fields.append(current.trimmingCharacters(in: .whitespaces))
-        return fields
+        return imported
     }
 
     // MARK: - TextExpander Plist
@@ -80,6 +62,86 @@ struct ImportService {
             }
             let label = dict["label"] as? String ?? ""
             return ImportedSnippet(abbreviation: abbreviation, expansion: expansion, label: label, groupName: groupName)
+        }
+    }
+}
+
+/// Tokenizes CSV text per RFC 4180: supports quoted fields, escaped quotes (""), embedded newlines.
+enum CSVTokenizer {
+    static func rows(in content: String) -> [[String]] {
+        var state = ParserState()
+        let chars = Array(content)
+        var i = 0
+        while i < chars.count {
+            i = state.consume(chars: chars, at: i)
+        }
+        state.finalize()
+        return state.rows
+    }
+
+    private struct ParserState {
+        var rows: [[String]] = []
+        var currentRow: [String] = []
+        var currentField = ""
+        var inQuotes = false
+
+        mutating func consume(chars: [Character], at index: Int) -> Int {
+            let c = chars[index]
+            if inQuotes {
+                return consumeQuoted(c: c, chars: chars, at: index)
+            }
+            return consumeUnquoted(c: c, chars: chars, at: index)
+        }
+
+        private mutating func consumeQuoted(c: Character, chars: [Character], at index: Int) -> Int {
+            if c != "\"" {
+                currentField.append(c)
+                return index + 1
+            }
+            if index + 1 < chars.count, chars[index + 1] == "\"" {
+                currentField.append("\"")
+                return index + 2
+            }
+            inQuotes = false
+            return index + 1
+        }
+
+        private mutating func consumeUnquoted(c: Character, chars: [Character], at index: Int) -> Int {
+            switch c {
+            case "\"":
+                inQuotes = true
+                return index + 1
+            case ",":
+                commitField()
+                return index + 1
+            case "\r":
+                commitRow()
+                return (index + 1 < chars.count && chars[index + 1] == "\n") ? index + 2 : index + 1
+            case "\n":
+                commitRow()
+                return index + 1
+            default:
+                currentField.append(c)
+                return index + 1
+            }
+        }
+
+        private mutating func commitField() {
+            currentRow.append(currentField)
+            currentField = ""
+        }
+
+        private mutating func commitRow() {
+            commitField()
+            if !currentRow.allSatisfy(\.isEmpty) {
+                rows.append(currentRow)
+            }
+            currentRow = []
+        }
+
+        mutating func finalize() {
+            guard !currentField.isEmpty || !currentRow.isEmpty else { return }
+            commitRow()
         }
     }
 }

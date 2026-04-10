@@ -2,8 +2,8 @@ import SwiftData
 import SwiftUI
 
 struct SnippetListView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(SettingsManager.self) private var settings
+    @Environment(SnippetStore.self) private var store
     @Query(sort: \Snippet.abbreviation) private var snippets: [Snippet]
     @Query(sort: \SnippetGroup.sortOrder) private var groups: [SnippetGroup]
     @State private var selectedSnippetID: PersistentIdentifier?
@@ -13,6 +13,7 @@ struct SnippetListView: View {
     @State private var showingImportSheet = false
     @State private var showingAddGroup = false
     @State private var newGroupName = ""
+    @State private var errorMessage: String?
 
     private var filteredSnippets: [Snippet] {
         var result = snippets
@@ -25,7 +26,6 @@ struct SnippetListView: View {
                     $0.label.localizedStandardContains(searchText)
             }
         }
-        // Apply sort
         switch settings.snippetSortOrder {
         case .alphabetical:
             result.sort { $0.abbreviation.localizedStandardCompare($1.abbreviation) == .orderedAscending }
@@ -59,21 +59,33 @@ struct SnippetListView: View {
         .navigationTitle("Keyed")
         .sheet(isPresented: $showingAddSheet) {
             AddSnippetView(groupID: selectedGroupID)
+                .environment(store)
         }
         .sheet(isPresented: $showingImportSheet) {
             ImportView()
+                .environment(store)
         }
         .alert("New Group", isPresented: $showingAddGroup) {
             TextField("Group name", text: $newGroupName)
             Button("Cancel", role: .cancel) { newGroupName = "" }
             Button("Add") {
-                guard !newGroupName.isEmpty else { return }
-                let maxOrder = groups.map(\.sortOrder).max() ?? -1
-                let group = SnippetGroup(name: newGroupName, sortOrder: maxOrder + 1)
-                modelContext.insert(group)
-                try? modelContext.save()
+                let trimmed = newGroupName.trimmingCharacters(in: .whitespacesAndNewlines)
                 newGroupName = ""
+                guard !trimmed.isEmpty else { return }
+                do {
+                    _ = try store.addGroup(name: trimmed)
+                } catch {
+                    errorMessage = error.localizedDescription
+                }
             }
+        }
+        .alert("Error", isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button("OK", role: .cancel) { errorMessage = nil }
+        } message: {
+            Text(errorMessage ?? "")
         }
     }
 
@@ -89,10 +101,6 @@ struct SnippetListView: View {
                         Label(group.name, systemImage: "folder")
                     }
                     .contextMenu {
-                        Button("Rename...") {
-                            // Simple rename via alert would need additional state;
-                            // for now, editing in-place is deferred to v1.x
-                        }
                         Button("Delete Group", role: .destructive) {
                             deleteGroup(group)
                         }
@@ -109,7 +117,9 @@ struct SnippetListView: View {
         .frame(minWidth: 160)
         .toolbar {
             ToolbarItem(placement: .automatic) {
-                Button(action: { showingAddGroup = true }) {
+                Button {
+                    showingAddGroup = true
+                } label: {
                     Label("Add Group", systemImage: "folder.badge.plus")
                 }
             }
@@ -140,16 +150,6 @@ struct SnippetListView: View {
             selectedSnippetID = nil
             return .handled
         }
-        .onKeyPress(.return) {
-            guard let selectedID = selectedSnippetID,
-                  let snippet = filteredSnippets.first(where: { $0.persistentModelID == selectedID })
-            else {
-                return .ignored
-            }
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(snippet.expansion, forType: .string)
-            return .handled
-        }
         .overlay {
             if filteredSnippets.isEmpty {
                 ContentUnavailableView {
@@ -164,12 +164,16 @@ struct SnippetListView: View {
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(action: { showingAddSheet = true }) {
+                Button {
+                    showingAddSheet = true
+                } label: {
                     Label("Add Snippet", systemImage: "plus")
                 }
             }
             ToolbarItem {
-                Button(action: { showingImportSheet = true }) {
+                Button {
+                    showingImportSheet = true
+                } label: {
                     Label("Import", systemImage: "square.and.arrow.down")
                 }
             }
@@ -191,32 +195,30 @@ struct SnippetListView: View {
         if snippet.persistentModelID == selectedSnippetID {
             selectedSnippetID = nil
         }
-        modelContext.delete(snippet)
-        try? modelContext.save()
+        do {
+            try store.deleteSnippet(snippet)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func duplicateSnippet(_ snippet: Snippet) {
-        let copy = Snippet(
-            abbreviation: snippet.abbreviation + "_copy",
-            expansion: snippet.expansion,
-            label: snippet.label,
-            groupID: snippet.groupID
-        )
-        modelContext.insert(copy)
-        try? modelContext.save()
+        do {
+            _ = try store.duplicateSnippet(snippet)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     private func deleteGroup(_ group: SnippetGroup) {
-        // Unassign snippets from this group
-        let groupID = group.id
-        for snippet in snippets where snippet.groupID == groupID {
-            snippet.groupID = nil
-        }
-        if selectedGroupID == groupID {
+        if selectedGroupID == group.id {
             selectedGroupID = nil
         }
-        modelContext.delete(group)
-        try? modelContext.save()
+        do {
+            try store.deleteGroup(group)
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 

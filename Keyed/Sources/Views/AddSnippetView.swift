@@ -2,19 +2,22 @@ import SwiftData
 import SwiftUI
 
 struct AddSnippetView: View {
-    @Environment(\.modelContext) private var modelContext
     @Environment(\.dismiss) private var dismiss
-    @Query private var existingSnippets: [Snippet]
+    @Environment(SnippetStore.self) private var store
     @State private var abbreviation = ""
     @State private var expansion = ""
     @State private var label = ""
     @State private var errorMessage: String?
-    @State private var showingDuplicateAlert = false
-    @State private var existingSnippet: Snippet?
     let groupID: UUID?
 
+    private var trimmedAbbreviation: String {
+        abbreviation.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private var isDuplicate: Bool {
-        existingSnippets.contains { $0.abbreviation.lowercased() == abbreviation.lowercased() }
+        guard !trimmedAbbreviation.isEmpty else { return false }
+        let lowered = trimmedAbbreviation.lowercased()
+        return store.allSnippets().contains { $0.abbreviation.lowercased() == lowered }
     }
 
     var body: some View {
@@ -22,7 +25,7 @@ struct AddSnippetView: View {
             Form {
                 TextField("Abbreviation", text: $abbreviation)
                     .font(.system(.body, design: .monospaced))
-                if isDuplicate, !abbreviation.isEmpty {
+                if isDuplicate {
                     Text("A snippet with this abbreviation already exists.")
                         .foregroundStyle(.orange)
                         .font(.caption)
@@ -46,46 +49,24 @@ struct AddSnippetView: View {
                 Spacer()
                 Button("Add Snippet") { addSnippet() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(abbreviation.isEmpty || expansion.isEmpty)
+                    .disabled(trimmedAbbreviation.isEmpty || expansion.isEmpty || isDuplicate)
             }
             .padding()
         }
         .frame(width: 400, height: 300)
-        .alert("Duplicate Abbreviation", isPresented: $showingDuplicateAlert) {
-            Button("Replace") { replaceExisting() }
-            Button("Keep Both") { addWithSuffix() }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("A snippet with abbreviation '\(abbreviation)' already exists. What would you like to do?")
-        }
     }
 
     private func addSnippet() {
-        if let existing = existingSnippets.first(where: { $0.abbreviation.lowercased() == abbreviation.lowercased() }) {
-            existingSnippet = existing
-            showingDuplicateAlert = true
-            return
+        do {
+            _ = try store.addSnippet(
+                abbreviation: trimmedAbbreviation,
+                expansion: expansion,
+                label: label,
+                groupID: groupID
+            )
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        let snippet = Snippet(abbreviation: abbreviation, expansion: expansion, label: label, groupID: groupID)
-        modelContext.insert(snippet)
-        try? modelContext.save()
-        dismiss()
-    }
-
-    private func replaceExisting() {
-        if let existing = existingSnippet {
-            existing.expansion = expansion
-            existing.label = label.isEmpty ? existing.label : label
-            existing.updatedAt = .now
-            try? modelContext.save()
-        }
-        dismiss()
-    }
-
-    private func addWithSuffix() {
-        let snippet = Snippet(abbreviation: abbreviation + "2", expansion: expansion, label: label, groupID: groupID)
-        modelContext.insert(snippet)
-        try? modelContext.save()
-        dismiss()
     }
 }

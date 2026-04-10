@@ -8,7 +8,6 @@ enum CasePattern {
 
 enum CaseTransform {
     static func detect(typed: String, abbreviation: String) -> CasePattern {
-        // Only detect case changes for the letter characters
         let typedLetters = typed.filter(\.isLetter)
         guard !typedLetters.isEmpty else { return .asIs }
 
@@ -16,7 +15,6 @@ enum CaseTransform {
             return .allUpper
         }
 
-        // Title case: first letter uppercase, rest matches original abbreviation pattern
         if let first = typedLetters.first, first.isUppercase {
             let abbrevLetters = abbreviation.filter(\.isLetter)
             let typedRest = String(typedLetters.dropFirst())
@@ -36,13 +34,16 @@ enum CaseTransform {
         case .allUpper:
             text.uppercased()
         case .titleCase:
-            titleCase(text)
+            capitalizingFirstLetter(text)
         }
     }
 
-    private static func titleCase(_ text: String) -> String {
-        // Capitalize first letter of each sentence/line, lowercase the rest
-        guard let first = text.first else { return text }
-        return String(first).uppercased() + text.dropFirst().lowercased()
+    /// Uppercases only the first letter in the text; all other characters are preserved as-is.
+    private static func capitalizingFirstLetter(_ text: String) -> String {
+        guard let firstLetterIndex = text.firstIndex(where: \.isLetter) else { return text }
+        var result = text
+        let letter = result[firstLetterIndex]
+        result.replaceSubrange(firstLetterIndex...firstLetterIndex, with: String(letter).uppercased())
+        return result
     }
 }

@@ -19,11 +19,21 @@ final class MockKeystrokeMonitor: KeystrokeMonitoring, @unchecked Sendable {
     }
 }
 
+struct ReplaceTextCall {
+    let abbreviationLength: Int
+    let expansion: String
+    let cursorOffset: Int?
+}
+
 final class MockTextInjector: TextInjecting, @unchecked Sendable {
-    var replaceTextCalls: [(abbreviationLength: Int, expansion: String, cursorOffset: Int?)] = []
+    var replaceTextCalls: [ReplaceTextCall] = []
 
     func replaceText(abbreviationLength: Int, expansion: String, cursorOffset: Int?) async {
-        replaceTextCalls.append((abbreviationLength, expansion, cursorOffset))
+        replaceTextCalls.append(ReplaceTextCall(
+            abbreviationLength: abbreviationLength,
+            expansion: expansion,
+            cursorOffset: cursorOffset
+        ))
     }
 }
 
