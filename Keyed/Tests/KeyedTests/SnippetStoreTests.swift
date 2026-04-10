@@ -60,6 +60,23 @@ final class SnippetStoreTests: XCTestCase {
         )
     }
 
+    /// Regression: with `@Attribute(.unique)` removed from Snippet.abbreviation
+    /// (for CloudKit compatibility), duplicate prevention now lives entirely in
+    /// SnippetStore.addSnippet. This test would pass accidentally with either
+    /// the schema constraint OR the store check — it guards the store check
+    /// specifically by ensuring the error type is the store's, not SwiftData's.
+    func test_addSnippet_duplicate_throwsStoreError() throws {
+        _ = try store.addSnippet(abbreviation: ":dup", expansion: "a", label: "", groupID: nil)
+        do {
+            _ = try store.addSnippet(abbreviation: ":dup", expansion: "b", label: "", groupID: nil)
+            XCTFail("Expected duplicate to throw")
+        } catch let SnippetStoreError.duplicateAbbreviation(abbr) {
+            XCTAssertEqual(abbr, ":dup")
+        } catch {
+            XCTFail("Expected SnippetStoreError.duplicateAbbreviation, got \(error)")
+        }
+    }
+
     // MARK: - Update snippet
 
     func test_updateSnippet_changesExpansion() throws {

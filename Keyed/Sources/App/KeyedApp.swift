@@ -36,26 +36,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let modelContainer: ModelContainer
 
     override init() {
-        do {
-            modelContainer = try ModelContainer(for: Snippet.self, SnippetGroup.self, AppExclusion.self)
-        } catch {
-            // Fallback: reset the store if schema migration fails. Pre-1.0; no meaningful data loss risk yet.
-            logger
-                .error(
-                    "ModelContainer creation failed: \(error.localizedDescription, privacy: .public) — using in-memory fallback"
-                )
+        let iCloudEnabled = UserDefaults.standard.bool(forKey: "iCloudSyncEnabled")
+        modelContainer = Self.makeModelContainer(iCloudSyncEnabled: iCloudEnabled)
+        super.init()
+        snippetStore = SnippetStore(modelContext: modelContainer.mainContext)
+    }
+
+    /// Builds a ModelContainer honoring the user's iCloud sync preference.
+    /// Falls back to a local (then in-memory) store if CloudKit initialization
+    /// fails — this keeps the app usable on unsigned builds and machines
+    /// without an iCloud account, where entitlements or CloudKit containers
+    /// are unavailable at runtime.
+    private static func makeModelContainer(iCloudSyncEnabled: Bool) -> ModelContainer {
+        let schema = Schema([Snippet.self, SnippetGroup.self, AppExclusion.self])
+
+        if iCloudSyncEnabled {
             do {
-                let config = ModelConfiguration(isStoredInMemoryOnly: true)
-                modelContainer = try ModelContainer(
-                    for: Snippet.self, SnippetGroup.self, AppExclusion.self,
-                    configurations: config
+                let cloudConfig = ModelConfiguration(schema: schema, cloudKitDatabase: .automatic)
+                let container = try ModelContainer(for: schema, configurations: cloudConfig)
+                logger.info("ModelContainer created with CloudKit sync enabled")
+                return container
+            } catch {
+                logger.error(
+                    "CloudKit ModelContainer creation failed: \(error.localizedDescription, privacy: .public) — falling back to local"
                 )
+            }
+        }
+
+        do {
+            let localConfig = ModelConfiguration(schema: schema, cloudKitDatabase: .none)
+            return try ModelContainer(for: schema, configurations: localConfig)
+        } catch {
+            logger.error(
+                "Local ModelContainer creation failed: \(error.localizedDescription, privacy: .public) — using in-memory fallback"
+            )
+            let memoryConfig = ModelConfiguration(isStoredInMemoryOnly: true)
+            do {
+                return try ModelContainer(for: schema, configurations: memoryConfig)
             } catch {
                 fatalError("Could not create any ModelContainer: \(error)")
             }
         }
-        super.init()
-        snippetStore = SnippetStore(modelContext: modelContainer.mainContext)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
