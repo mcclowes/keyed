@@ -6,14 +6,20 @@ struct SnippetListView: View {
     @Environment(SnippetStore.self) private var store
     @Query(sort: \Snippet.abbreviation) private var snippets: [Snippet]
     @Query(sort: \SnippetGroup.sortOrder) private var groups: [SnippetGroup]
+    @Query private var suggestions: [PhraseSuggestion]
     @State private var selectedSnippetID: PersistentIdentifier?
     @State private var selectedGroupID: UUID?
     @State private var searchText = ""
     @State private var showingAddSheet = false
     @State private var showingImportSheet = false
     @State private var showingAddGroup = false
+    @State private var showingSuggestions = false
     @State private var newGroupName = ""
     @State private var errorMessage: String?
+
+    private var pendingSuggestionCount: Int {
+        suggestions.count(where: { !$0.isDismissed && $0.count >= settings.suggestionThreshold })
+    }
 
     private var filteredSnippets: [Snippet] {
         var result = snippets
@@ -64,6 +70,18 @@ struct SnippetListView: View {
         .sheet(isPresented: $showingImportSheet) {
             ImportView()
                 .environment(store)
+        }
+        .sheet(isPresented: $showingSuggestions) {
+            NavigationStack {
+                SuggestionsView()
+                    .navigationTitle("Suggestions")
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button("Done") { showingSuggestions = false }
+                        }
+                    }
+            }
+            .frame(minWidth: 520, minHeight: 400)
         }
         .alert("New Group", isPresented: $showingAddGroup) {
             TextField("Group name", text: $newGroupName)
@@ -175,6 +193,26 @@ struct SnippetListView: View {
                     showingImportSheet = true
                 } label: {
                     Label("Import", systemImage: "square.and.arrow.down")
+                }
+            }
+            ToolbarItem {
+                Button {
+                    showingSuggestions = true
+                } label: {
+                    Label("Suggestions", systemImage: "wand.and.stars")
+                }
+                .help("Review smart suggestions")
+                .overlay(alignment: .topTrailing) {
+                    if pendingSuggestionCount > 0 {
+                        Text("\(pendingSuggestionCount)")
+                            .font(.caption2)
+                            .fontWeight(.semibold)
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.red, in: Capsule())
+                            .offset(x: 6, y: -4)
+                    }
                 }
             }
             ToolbarItem {

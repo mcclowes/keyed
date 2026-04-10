@@ -9,6 +9,15 @@ protocol ExpansionEngineDelegate: AnyObject {
     func expansionEngine(_ engine: ExpansionEngine, didExpand abbreviation: String, to expansion: String)
 }
 
+/// An observer that wants to see raw keystroke events *after* the engine has
+/// applied its gates (enabled, not currently expanding, not in an excluded
+/// app). Used by `SuggestionTracker` to detect repeated phrases while
+/// honoring the same privacy filters as expansion.
+@MainActor
+protocol KeystrokeObserving: AnyObject {
+    func observe(_ event: KeystrokeEvent)
+}
+
 @MainActor
 final class ExpansionEngine {
     private var buffer: KeystrokeBuffer
@@ -24,6 +33,7 @@ final class ExpansionEngine {
     private(set) var isEnabled = true
 
     weak var delegate: ExpansionEngineDelegate?
+    weak var keystrokeObserver: KeystrokeObserving?
 
     init(
         monitor: KeystrokeMonitoring,
@@ -77,6 +87,8 @@ final class ExpansionEngine {
         {
             return
         }
+
+        keystrokeObserver?.observe(event)
 
         switch event {
         case let .character(char):

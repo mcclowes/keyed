@@ -10,6 +10,8 @@ protocol SettingsManaging {
     var launchAtLogin: Bool { get set }
     var playSound: Bool { get set }
     var snippetSortOrder: SnippetSortOrder { get set }
+    var smartSuggestionsEnabled: Bool { get set }
+    var suggestionThreshold: Int { get set }
 }
 
 @MainActor
@@ -36,6 +38,14 @@ final class SettingsManager: SettingsManaging {
         didSet { defaults.set(snippetSortOrder.rawValue, forKey: Keys.snippetSortOrder) }
     }
 
+    var smartSuggestionsEnabled: Bool {
+        didSet { defaults.set(smartSuggestionsEnabled, forKey: Keys.smartSuggestionsEnabled) }
+    }
+
+    var suggestionThreshold: Int {
+        didSet { defaults.set(suggestionThreshold, forKey: Keys.suggestionThreshold) }
+    }
+
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
@@ -45,6 +55,8 @@ final class SettingsManager: SettingsManaging {
             Keys.launchAtLogin: false,
             Keys.playSound: false,
             Keys.snippetSortOrder: SnippetSortOrder.alphabetical.rawValue,
+            Keys.smartSuggestionsEnabled: false,
+            Keys.suggestionThreshold: 3,
         ])
 
         isEnabled = defaults.bool(forKey: Keys.isEnabled)
@@ -52,6 +64,8 @@ final class SettingsManager: SettingsManaging {
         playSound = defaults.bool(forKey: Keys.playSound)
         snippetSortOrder = SnippetSortOrder(rawValue: defaults.string(forKey: Keys.snippetSortOrder) ?? "") ??
             .alphabetical
+        smartSuggestionsEnabled = defaults.bool(forKey: Keys.smartSuggestionsEnabled)
+        suggestionThreshold = max(2, defaults.integer(forKey: Keys.suggestionThreshold))
     }
 
     private func updateLoginItem() {
@@ -71,6 +85,8 @@ final class SettingsManager: SettingsManaging {
         static let launchAtLogin = "launchAtLogin"
         static let playSound = "playSound"
         static let snippetSortOrder = "snippetSortOrder"
+        static let smartSuggestionsEnabled = "smartSuggestionsEnabled"
+        static let suggestionThreshold = "suggestionThreshold"
     }
 }
 

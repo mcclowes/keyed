@@ -13,6 +13,7 @@ struct KeyedApp: App {
             SnippetListView()
                 .environment(appDelegate.settingsManager)
                 .environment(appDelegate.snippetStore)
+                .environment(appDelegate.suggestionStore)
         }
         .modelContainer(appDelegate.modelContainer)
 
@@ -20,6 +21,7 @@ struct KeyedApp: App {
             SettingsView()
                 .environment(appDelegate.settingsManager)
                 .environment(appDelegate.snippetStore)
+                .environment(appDelegate.suggestionStore)
                 .modelContainer(appDelegate.modelContainer)
         }
     }
@@ -31,13 +33,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var onboardingWindow: NSWindow?
     private(set) var expansionEngine: ExpansionEngine?
     private(set) var snippetStore: SnippetStore!
+    private(set) var suggestionStore: SuggestionStore!
+    private(set) var suggestionTracker: SuggestionTracker!
     let settingsManager = SettingsManager()
     let accessibilityService = AccessibilityService()
     let modelContainer: ModelContainer
 
     override init() {
         do {
-            modelContainer = try ModelContainer(for: Snippet.self, SnippetGroup.self, AppExclusion.self)
+            modelContainer = try ModelContainer(
+                for: Snippet.self, SnippetGroup.self, AppExclusion.self, PhraseSuggestion.self
+            )
         } catch {
             // Fallback: reset the store if schema migration fails. Pre-1.0; no meaningful data loss risk yet.
             logger
@@ -47,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             do {
                 let config = ModelConfiguration(isStoredInMemoryOnly: true)
                 modelContainer = try ModelContainer(
-                    for: Snippet.self, SnippetGroup.self, AppExclusion.self,
+                    for: Snippet.self, SnippetGroup.self, AppExclusion.self, PhraseSuggestion.self,
                     configurations: config
                 )
             } catch {
@@ -56,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         super.init()
         snippetStore = SnippetStore(modelContext: modelContainer.mainContext)
+        suggestionStore = SuggestionStore(modelContext: modelContainer.mainContext)
+        suggestionTracker = SuggestionTracker(store: suggestionStore)
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -70,7 +78,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.updateAbbreviations(snippetStore.abbreviationMap)
         engine.updateExcludedApps(snippetStore.excludedBundleIDs)
         engine.delegate = self
+        engine.keystrokeObserver = suggestionTracker
         expansionEngine = engine
+
+        suggestionTracker.isEnabled = settingsManager.smartSuggestionsEnabled
 
         if accessibilityService.isTrusted() {
             engine.start()
@@ -79,6 +90,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         observeSettingsLoop()
         observeAbbreviationsLoop()
         observeExclusionsLoop()
+        observeSuggestionsSettingLoop()
         observeAccessibilityChanges()
 
         if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
@@ -113,6 +125,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 guard let self else { return }
                 self.expansionEngine?.updateAbbreviations(self.snippetStore.abbreviationMap)
                 self.observeAbbreviationsLoop()
+            }
+        }
+    }
+
+    private func observeSuggestionsSettingLoop() {
+        withObservationTracking {
+            _ = settingsManager.smartSuggestionsEnabled
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                self.suggestionTracker.isEnabled = self.settingsManager.smartSuggestionsEnabled
+                if !self.settingsManager.smartSuggestionsEnabled {
+                    self.suggestionTracker.reset()
+                }
+                self.observeSuggestionsSettingLoop()
             }
         }
     }

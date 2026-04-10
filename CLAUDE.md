@@ -40,6 +40,7 @@ Keyed/
       Snippet.swift                       # SwiftData @Model
       SnippetGroup.swift                  # SwiftData @Model
       AppExclusion.swift                  # SwiftData @Model
+      PhraseSuggestion.swift              # SwiftData @Model — detected repeated phrases
     Services/
       ExpansionEngine.swift               # Orchestrates monitor + buffer + injector
       KeystrokeBuffer.swift               # Ring buffer for typed character tracking
@@ -47,6 +48,8 @@ Keyed/
       TextInjector.swift                  # Unicode-event text injection + cursor positioning
       AccessibilityService.swift          # AXIsProcessTrusted check/request
       SnippetStore.swift                  # SwiftData CRUD + abbreviation map
+      SuggestionStore.swift               # SwiftData CRUD for PhraseSuggestion
+      SuggestionTracker.swift             # Phrase extraction from keystroke stream
       SettingsManager.swift               # UserDefaults-backed @Observable
       StatusBarController.swift           # NSStatusItem + NSPopover
       ImportService.swift                 # CSV + .textexpander file parsing
@@ -57,6 +60,7 @@ Keyed/
       SnippetDetailView.swift             # Edit snippet form
       AddSnippetView.swift                # New snippet sheet with duplicate detection
       MenuBarPopoverView.swift            # Status bar popover
+      SuggestionsView.swift               # Review queue for phrase suggestions
       OnboardingView.swift                # Multi-step first-launch wizard
       SettingsView.swift                  # Tabbed preferences (General + Excluded Apps)
       ExclusionSettingsView.swift         # Per-app exclusion management
@@ -77,7 +81,7 @@ Keyed/
 
 ## Key modules
 
-- **`ExpansionEngine`** — orchestrates keystroke monitoring + abbreviation matching + text injection. Case-insensitive matching with case-aware expansion, word-boundary enforcement (no mid-word expansion), cached abbreviation list. Placeholder resolution. App exclusions. `isExpanding` guard prevents feedback loops.
+- **`ExpansionEngine`** — orchestrates keystroke monitoring + abbreviation matching + text injection. Case-insensitive matching with case-aware expansion, word-boundary enforcement (no mid-word expansion), cached abbreviation list. Placeholder resolution. App exclusions. `isExpanding` guard prevents feedback loops. Forwards gated keystrokes to an optional `KeystrokeObserving` (used by `SuggestionTracker`).
 - **`KeystrokeBuffer`** — fixed-capacity ring buffer tracking typed characters. Supports exact and case-insensitive suffix matching, backspace, reset on boundary keys, and word-boundary lookbehind.
 - **`CGEventTapMonitor`** — system-wide keystroke capture via CGEventTap on a dedicated dispatch queue. Handles modifier keys (Option passes through for character composition), boundary keys, unicode extraction (4 UTF-16 code units for non-BMP support), `tapDisabledByTimeout`/`tapDisabledByUserInput` re-enablement. Manages its own retain via `Unmanaged` for lifetime safety.
 - **`UnicodeEventTextInjector`** — text injection via `CGEvent.keyboardSetUnicodeString`. No clipboard involvement — deletes the abbreviation with backspaces, then posts the expansion as a series of synthetic key events carrying Unicode string payloads.
@@ -86,16 +90,20 @@ Keyed/
 - **`ImportService`** — RFC 4180 CSV parser (quoted fields, escaped `""` quotes, embedded newlines, case-insensitive headers) and TextExpander `.textexpander` plist parser.
 - **`CaseTransform`** — detects ALL CAPS / Title Case from typed input, applies transform to expansion text.
 - **`PlaceholderResolver`** — resolves `{date}`, `{time}`, `{datetime}`, `{clipboard}`, `{cursor}` at expansion time.
+- **`SuggestionTracker`** (`KeystrokeObserving`) — opt-in local phrase-frequency tracker. Buffers characters between sentence terminators (`.`, `!`, `?`, `\n`) or boundary keys, validates (min 15 chars, ≥3 words, must contain a letter), normalizes (lowercased + collapsed whitespace), and records each candidate in `SuggestionStore`. Runs entirely on-device; nothing is transmitted. Respects excluded apps (it's gated behind the engine's filters) and the `smartSuggestionsEnabled` setting.
+- **`SuggestionStore`** (`SuggestionStoring`) — SwiftData CRUD for `PhraseSuggestion`. Deduplicates by `normalizedText`, increments count on repeats, surfaces pending suggestions above a configurable threshold, and skips phrases the user has permanently dismissed.
 
 ## Testing
 
-88 tests across 6 files. Run with `make test`.
+110 tests across 8 files. Run with `make test`.
 
 | File | Tests | Covers |
 |------|-------|--------|
 | `KeystrokeBufferTests` | 21 | Ring buffer, matching, word boundary, longest match, unicode, overflow, backspace |
 | `ExpansionEngineTests` | 19 | Matching, word boundary, ambiguous prefixes, disable, case, backspace |
 | `SnippetStoreTests` | 20 | CRUD, search, groups, usage count, exclusions, duplicate-collision, staleness regression |
+| `SuggestionTrackerTests` | 15 | Phrase extraction, terminators, streaming behavior, disable, backspace, reset |
+| `SuggestionStoreTests` | 7 | Record/increment, dismiss, clearAll, dismissed-phrase resurrection guard |
 | `ImportServiceTests` | 9 | CSV, escaped quotes, embedded newlines, case-insensitive headers, TextExpander plist |
 | `CaseTransformTests` | 10 | Detection + application of case patterns including preservation of existing caps |
 | `PlaceholderResolverTests` | 9 | Date/time, cursor offset, strip |
