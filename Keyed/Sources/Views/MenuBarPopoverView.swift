@@ -3,9 +3,11 @@ import SwiftUI
 
 struct MenuBarPopoverView: View {
     @Environment(SettingsManager.self) private var settings
+    @Environment(AccessibilityService.self) private var accessibility
     @Query private var snippets: [Snippet]
 
     let onInjectSnippet: (Snippet) -> Void
+    let onOpenSystemSettings: () -> Void
 
     private var pinnedSnippets: [Snippet] {
         snippets
@@ -29,6 +31,11 @@ struct MenuBarPopoverView: View {
                 Toggle("", isOn: Bindable(settings).isEnabled)
                     .toggleStyle(.switch)
                     .labelsHidden()
+                    .disabled(!accessibility.isTrusted)
+            }
+
+            if !accessibility.isTrusted {
+                permissionBanner
             }
 
             Divider()
@@ -54,6 +61,30 @@ struct MenuBarPopoverView: View {
         }
         .padding()
         .frame(width: 260)
+    }
+
+    private var permissionBanner: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.orange)
+                Text("Permission required")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+            }
+            Text("Keyed can't expand text without Accessibility permission.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Open System Settings") {
+                onOpenSystemSettings()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 8))
     }
 
     @ViewBuilder

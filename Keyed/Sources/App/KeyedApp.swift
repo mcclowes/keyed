@@ -70,20 +70,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusBarController = StatusBarController(
             settingsManager: settingsManager,
             snippetStore: snippetStore,
+            accessibilityService: accessibilityService,
             expansionEngine: engine
         )
 
-        if accessibilityService.isTrusted() {
+        if accessibilityService.isTrusted {
             engine.start()
         }
 
         observeSettingsLoop()
         observeAbbreviationsLoop()
         observeExclusionsLoop()
-        observeAccessibilityChanges()
+        observeAccessibilityTrust()
 
         if !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-            showOnboarding()
+            showOnboarding(initialStep: .welcome)
+        } else if !accessibilityService.isTrusted {
+            showOnboarding(initialStep: .accessibility)
         }
     }
 
@@ -130,39 +133,55 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func observeAccessibilityChanges() {
-        DistributedNotificationCenter.default().addObserver(
-            forName: NSNotification.Name("com.apple.accessibility.api"),
-            object: nil,
-            queue: .main
-        ) { [weak self] _ in
+    private func observeAccessibilityTrust() {
+        withObservationTracking {
+            _ = accessibilityService.isTrusted
+        } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                if self.accessibilityService.isTrusted() {
+                if self.accessibilityService.isTrusted {
                     self.expansionEngine?.start()
+                    self.onboardingWindow?.close()
                 } else {
                     self.expansionEngine?.stop()
+                    if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
+                        self.showOnboarding(initialStep: .accessibility)
+                    }
                 }
+                self.observeAccessibilityTrust()
             }
         }
     }
 
-    private func showOnboarding() {
-        let onboardingView = OnboardingView(accessibilityService: accessibilityService)
-            .environment(settingsManager)
-            .environment(snippetStore)
+    private func showOnboarding(initialStep: OnboardingView.OnboardingStep) {
+        // If already showing, just bring it to front — don't stack windows.
+        if let existing = onboardingWindow, existing.isVisible {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let onboardingView = OnboardingView(
+            accessibilityService: accessibilityService,
+            initialStep: initialStep
+        )
+        .environment(settingsManager)
+        .environment(snippetStore)
 
         let controller = NSHostingController(rootView: onboardingView)
         let window = NSWindow(contentViewController: controller)
-        window.title = "Welcome to Keyed"
+        window.title = initialStep == .accessibility ? "Keyed — Permission Required" : "Welcome to Keyed"
         window.styleMask = [.titled, .closable]
         window.setContentSize(NSSize(width: 480, height: 400))
         window.center()
         window.isReleasedWhenClosed = false
         window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         onboardingWindow = window
 
-        UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        if initialStep == .welcome {
+            UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+        }
     }
 }
 

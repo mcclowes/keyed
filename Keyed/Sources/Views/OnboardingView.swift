@@ -4,8 +4,17 @@ struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SnippetStore.self) private var store
     let accessibilityService: AccessibilityService
-    @State private var step: OnboardingStep = .welcome
-    @State private var isTrusted = false
+    let initialStep: OnboardingStep
+    @State private var step: OnboardingStep
+
+    init(
+        accessibilityService: AccessibilityService,
+        initialStep: OnboardingStep = .welcome
+    ) {
+        self.accessibilityService = accessibilityService
+        self.initialStep = initialStep
+        _step = State(initialValue: initialStep)
+    }
 
     enum OnboardingStep {
         case welcome
@@ -56,42 +65,53 @@ struct OnboardingView: View {
             Image(systemName: "lock.shield")
                 .font(.system(size: 48))
                 .foregroundStyle(.orange)
-            Text("Accessibility Permission")
+            Text(initialStep == .accessibility ? "Permission Required" : "Accessibility Permission")
                 .font(.title2)
                 .fontWeight(.semibold)
             Text(
-                "Keyed uses macOS Accessibility to detect what you type and replace abbreviations with your saved snippets. This happens entirely on your device. Nothing leaves your Mac."
+                initialStep == .accessibility
+                    ? "Keyed needs Accessibility permission to detect what you type and replace abbreviations. Without it, text expansion cannot work. This happens entirely on your device — nothing leaves your Mac."
+                    : "Keyed uses macOS Accessibility to detect what you type and replace abbreviations with your saved snippets. This happens entirely on your device. Nothing leaves your Mac."
             )
             .multilineTextAlignment(.center)
             .foregroundStyle(.secondary)
             Spacer()
-            if isTrusted {
+            if accessibilityService.isTrusted {
                 Label("Permission granted", systemImage: "checkmark.circle.fill")
                     .foregroundStyle(.green)
-                Button("Continue") { step = .starterSnippets }
-                    .buttonStyle(.borderedProminent)
+                Button(initialStep == .accessibility ? "Done" : "Continue") {
+                    if initialStep == .accessibility {
+                        dismiss()
+                    } else {
+                        step = .starterSnippets
+                    }
+                }
+                .buttonStyle(.borderedProminent)
             } else {
                 Button("Grant Permission") {
                     accessibilityService.requestTrust()
-                    // Poll for trust status
                     Task {
-                        for _ in 0..<30 {
+                        for _ in 0..<60 {
                             try? await Task.sleep(for: .seconds(1))
-                            if accessibilityService.isTrusted() {
-                                isTrusted = true
-                                return
-                            }
+                            accessibilityService.refresh()
+                            if accessibilityService.isTrusted { return }
                         }
                     }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
 
-                Button("Skip for now") { step = .starterSnippets }
-                    .foregroundStyle(.secondary)
+                Button("Open System Settings") {
+                    accessibilityService.openSystemSettings()
+                }
+
+                if initialStep != .accessibility {
+                    Button("Skip for now") { step = .starterSnippets }
+                        .foregroundStyle(.secondary)
+                }
             }
         }
-        .onAppear { isTrusted = accessibilityService.isTrusted() }
+        .onAppear { accessibilityService.refresh() }
     }
 
     private var starterSnippetsStep: some View {

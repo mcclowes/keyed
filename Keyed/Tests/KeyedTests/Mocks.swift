@@ -37,15 +37,19 @@ final class MockTextInjector: TextInjecting, @unchecked Sendable {
     }
 }
 
-final class MockAccessibilityService: AccessibilityChecking, @unchecked Sendable {
-    var trusted = true
+@MainActor
+final class MockAccessibilityService: AccessibilityChecking {
+    var isTrusted: Bool = true
     var requestTrustCallCount = 0
+    var openSystemSettingsCallCount = 0
 
-    func isTrusted() -> Bool {
-        trusted
-    }
+    func refresh() {}
 
     func requestTrust() {
         requestTrustCallCount += 1
+    }
+
+    func openSystemSettings() {
+        openSystemSettingsCallCount += 1
     }
 }
