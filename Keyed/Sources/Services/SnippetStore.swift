@@ -43,6 +43,10 @@ protocol SnippetStoring: AnyObject {
     func removeExclusion(_ exclusion: AppExclusion) throws
     @discardableResult
     func seedDefaultExclusions(_ entries: [DefaultExclusions.Entry]) -> Int
+
+    /// Starter snippets
+    @discardableResult
+    func seedDefaultSnippets(_ entries: [DefaultSnippets.Entry]) -> Int
 }
 
 @MainActor
@@ -272,6 +276,33 @@ final class SnippetStore: SnippetStoring {
             logger.info("Seeded \(inserted, privacy: .public) default exclusions")
         } catch {
             logger.error("Failed to seed default exclusions: \(error.localizedDescription, privacy: .public)")
+        }
+        return inserted
+    }
+
+    // MARK: - Starter snippets
+
+    /// Inserts the given starter snippets, skipping any whose abbreviation already exists
+    /// (case-insensitive). Intended for first-launch seeding; callers should also gate on
+    /// a "has seeded" flag so users who delete defaults don't see them return.
+    /// Returns the number of new snippets actually inserted.
+    @discardableResult
+    func seedDefaultSnippets(_ entries: [DefaultSnippets.Entry] = DefaultSnippets.entries) -> Int {
+        let existing = Set(allSnippets().map { $0.abbreviation.lowercased() })
+        var inserted = 0
+        for entry in entries where !existing.contains(entry.abbreviation.lowercased()) {
+            modelContext.insert(
+                Snippet(abbreviation: entry.abbreviation, expansion: entry.expansion, label: entry.label)
+            )
+            inserted += 1
+        }
+        guard inserted > 0 else { return 0 }
+        do {
+            try modelContext.save()
+            rebuildAbbreviationMap()
+            logger.info("Seeded \(inserted, privacy: .public) default snippets")
+        } catch {
+            logger.error("Failed to seed default snippets: \(error.localizedDescription, privacy: .public)")
         }
         return inserted
     }

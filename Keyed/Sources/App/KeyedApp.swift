@@ -60,6 +60,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         seedDefaultExclusionsIfNeeded()
+        seedDefaultSnippetsIfNeeded()
 
         let monitor = CGEventTapMonitor()
         let injector = UnicodeEventTextInjector()
@@ -101,6 +102,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let key = "hasSeededDefaultExclusions"
         guard !UserDefaults.standard.bool(forKey: key) else { return }
         snippetStore.seedDefaultExclusions()
+        UserDefaults.standard.set(true, forKey: key)
+    }
+
+    private func seedDefaultSnippetsIfNeeded() {
+        let key = "hasSeededDefaultSnippets"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        // Extra safety: only seed into a genuinely empty store so we don't inject
+        // defaults on top of snippets the user imported before first launch completed.
+        if snippetStore.allSnippets().isEmpty {
+            snippetStore.seedDefaultSnippets()
+        }
         UserDefaults.standard.set(true, forKey: key)
     }
 

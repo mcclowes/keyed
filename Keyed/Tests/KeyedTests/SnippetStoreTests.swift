@@ -215,6 +215,43 @@ final class SnippetStoreTests: XCTestCase {
         XCTAssertEqual(Set(ids).count, ids.count, "Default exclusion list must have unique bundle IDs")
     }
 
+    // MARK: - Default snippets
+
+    func test_seedDefaultSnippets_addsAllEntriesOnEmptyStore() {
+        let entries = [
+            DefaultSnippets.Entry(abbreviation: ";date", expansion: "{date}", label: "Today's date"),
+            DefaultSnippets.Entry(abbreviation: ";tm", expansion: "™", label: "Trademark"),
+        ]
+        let inserted = store.seedDefaultSnippets(entries)
+        XCTAssertEqual(inserted, 2)
+        XCTAssertEqual(store.abbreviationMap[";date"], "{date}")
+        XCTAssertEqual(store.abbreviationMap[";tm"], "™")
+    }
+
+    func test_seedDefaultSnippets_skipsAlreadyPresentCaseInsensitive() throws {
+        _ = try store.addSnippet(abbreviation: ";DATE", expansion: "mine", label: "", groupID: nil)
+        let entries = [
+            DefaultSnippets.Entry(abbreviation: ";date", expansion: "{date}", label: "Today's date"),
+            DefaultSnippets.Entry(abbreviation: ";tm", expansion: "™", label: "Trademark"),
+        ]
+        let inserted = store.seedDefaultSnippets(entries)
+        XCTAssertEqual(inserted, 1)
+        XCTAssertEqual(store.abbreviationMap[";DATE"], "mine", "User's snippet must not be overwritten")
+        XCTAssertEqual(store.abbreviationMap[";tm"], "™")
+    }
+
+    func test_seedDefaultSnippets_bundledListIsNonEmptyAndUnique() {
+        let abbrevs = DefaultSnippets.entries.map { $0.abbreviation.lowercased() }
+        XCTAssertFalse(abbrevs.isEmpty)
+        XCTAssertEqual(Set(abbrevs).count, abbrevs.count, "Default snippet list must have unique abbreviations")
+    }
+
+    func test_seedDefaultSnippets_bundledListCanBeInsertedWithoutErrors() {
+        let inserted = store.seedDefaultSnippets()
+        XCTAssertEqual(inserted, DefaultSnippets.entries.count)
+        XCTAssertEqual(store.allSnippets().count, DefaultSnippets.entries.count)
+    }
+
     // MARK: - Pinned snippets
 
     func test_newSnippet_defaultsToUnpinned() throws {

@@ -47,6 +47,8 @@ Keyed/
       TextInjector.swift                  # Unicode-event text injection + cursor positioning
       AccessibilityService.swift          # AXIsProcessTrusted check/request
       SnippetStore.swift                  # SwiftData CRUD + abbreviation map
+      DefaultSnippets.swift               # First-launch starter snippet list
+      DefaultExclusions.swift             # First-launch excluded-app list
       SettingsManager.swift               # UserDefaults-backed @Observable
       StatusBarController.swift           # NSStatusItem + NSPopover
       ImportService.swift                 # CSV + .textexpander file parsing
