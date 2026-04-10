@@ -62,7 +62,13 @@ final class SettingsManager: SettingsManaging {
                 try SMAppService.mainApp.unregister()
             }
         } catch {
-            // Silently fail — login item management can fail in debug builds
+            // SMAppService can fail for expected reasons in debug builds (unsigned binary,
+            // unregistered login item identifier). Log in all builds so a user's bug report
+            // actually contains the reason their launch-at-login toggle silently reverted.
+            let action = launchAtLogin ? "register" : "unregister"
+            logger.error(
+                "SMAppService.\(action, privacy: .public) failed: \(error.localizedDescription, privacy: .public)"
+            )
         }
     }
 

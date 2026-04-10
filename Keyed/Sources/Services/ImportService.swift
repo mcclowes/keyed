@@ -11,7 +11,15 @@ struct ImportService {
     // MARK: - CSV
 
     func parseCSV(_ content: String) throws -> [ImportedSnippet] {
-        let rows = CSVTokenizer.rows(in: content)
+        // Excel and many other CSV exporters prefix UTF-8 files with a BOM (U+FEFF).
+        // If we don't strip it, the first header cell becomes "\u{FEFF}abbreviation" and the
+        // required-column lookup fails silently. Strip exactly one BOM from the front.
+        let stripped: String = if content.unicodeScalars.first == "\u{FEFF}" {
+            String(content.unicodeScalars.dropFirst())
+        } else {
+            content
+        }
+        let rows = CSVTokenizer.rows(in: stripped)
         guard let header = rows.first else { return [] }
 
         let lowered = header.map { $0.trimmingCharacters(in: .whitespaces).lowercased() }

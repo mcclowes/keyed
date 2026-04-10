@@ -10,12 +10,21 @@ enum KeystrokeEvent {
     case backspace
     case boundaryKey // arrow, tab, escape — resets buffer
     case modifiedKey // cmd/ctrl combo — ignored
+    /// Signalled when the event tap has been re-enabled after the system disabled it
+    /// (timeout or user-input blackout). The engine must treat its buffer as stale because
+    /// any characters typed during the blackout were never observed.
+    case tapReset
 }
 
 protocol KeystrokeMonitoring: AnyObject, Sendable {
     var onKeystroke: (@Sendable (KeystrokeEvent) -> Void)? { get set }
     func start()
     func stop()
+    /// Temporarily disables the tap so injected synthetic events cannot feed back into
+    /// the buffer. Calls are not reference-counted — a single `resume()` undoes any
+    /// number of `pause()` calls. Safe to call from any thread.
+    func pause()
+    func resume()
 }
 
 /// CGEventTap-based system keystroke capture.
@@ -131,6 +140,20 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
         retained?.release()
     }
 
+    func pause() {
+        stateLock.lock()
+        let tap = eventTap
+        stateLock.unlock()
+        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+    }
+
+    func resume() {
+        stateLock.lock()
+        let tap = eventTap
+        stateLock.unlock()
+        if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+    }
+
     fileprivate func handleCallback(type: CGEventType, event: CGEvent) {
         switch type {
         case .tapDisabledByTimeout, .tapDisabledByUserInput:
@@ -139,6 +162,9 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
             let tap = eventTap
             stateLock.unlock()
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            // Anything typed during the blackout is lost — tell the engine to discard its
+            // buffer so a stale prefix cannot combine with new input to trigger an expansion.
+            onKeystroke?(.tapReset)
             return
         case .keyDown:
             handleKeyDown(event)

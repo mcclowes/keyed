@@ -74,26 +74,6 @@ final class KeystrokeBufferTests: XCTestCase {
         XCTAssertFalse(buffer.hasSuffix(":email"))
     }
 
-    // MARK: - First match from dictionary
-
-    func test_firstMatch_findsMatchingAbbreviation() {
-        var buffer = KeystrokeBuffer(capacity: 64)
-        for char in ":email" {
-            buffer.append(String(char))
-        }
-        let abbreviations: Set = [":email", ":sig", ":addr"]
-        XCTAssertEqual(buffer.firstMatch(from: abbreviations), ":email")
-    }
-
-    func test_firstMatch_noMatch_returnsNil() {
-        var buffer = KeystrokeBuffer(capacity: 64)
-        for char in ":em" {
-            buffer.append(String(char))
-        }
-        let abbreviations: Set = [":email", ":sig"]
-        XCTAssertNil(buffer.firstMatch(from: abbreviations))
-    }
-
     // MARK: - Longest match
 
     func test_longestMatch_prefersLongerCandidate() {
@@ -146,6 +126,60 @@ final class KeystrokeBufferTests: XCTestCase {
             buffer.append(String(char))
         }
         XCTAssertTrue(buffer.hasWordBoundaryBefore(suffixLength: 3))
+    }
+
+    func test_wordBoundary_atStartOfWrappedBuffer_returnsFalse() {
+        // Fill the buffer to its exact capacity so the oldest position still holds a real
+        // typed character and suffixLength == size. Without overflow tracking, the buffer
+        // answered "yes, that's a word boundary" — now it correctly answers "no" once the
+        // ring has wrapped.
+        var buffer = KeystrokeBuffer(capacity: 4)
+        // Overflow the buffer so hasWrapped flips.
+        for char in "abcde" {
+            buffer.append(String(char))
+        }
+        // Contents: "bcde", suffixLength == 4 fills the buffer.
+        XCTAssertEqual(buffer.contents, "bcde")
+        XCTAssertFalse(buffer.hasWordBoundaryBefore(suffixLength: 4))
+    }
+
+    func test_wordBoundary_afterResetPostOverflow_returnsTrue() {
+        // reset() must clear the wrapped flag — otherwise a clean buffer stays stuck.
+        var buffer = KeystrokeBuffer(capacity: 4)
+        for char in "abcde" {
+            buffer.append(String(char))
+        }
+        buffer.reset()
+        for char in "foo" {
+            buffer.append(String(char))
+        }
+        XCTAssertTrue(buffer.hasWordBoundaryBefore(suffixLength: 3))
+    }
+
+    // MARK: - Longest match with mixed case
+
+    func test_longestSuffixMatch_prefersLongerCaseInsensitiveOverShorterSameCandidate() {
+        // Buffer content " abcdef" — the longer candidate "abCDef" matches only
+        // case-insensitively, but still beats the shorter exact-case candidate "CD" (which
+        // doesn't match the tail anyway). Verifies the two-pass walk returns the longest
+        // matching candidate under the insensitive pass.
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in " abcdef" {
+            buffer.append(String(char))
+        }
+        let candidates = ["abCDef", "CD"]
+        XCTAssertEqual(buffer.longestSuffixMatch(in: candidates), "abCDef")
+    }
+
+    func test_longestSuffixMatch_exactCasePreferredAtSameLength() {
+        // At equal length, exact-case match wins regardless of candidate ordering — the
+        // exact-case pass runs first and short-circuits before the insensitive pass.
+        var buffer = KeystrokeBuffer(capacity: 64)
+        for char in " foo" {
+            buffer.append(String(char))
+        }
+        let candidates = ["FOO", "foo"]
+        XCTAssertEqual(buffer.longestSuffixMatch(in: candidates), "foo")
     }
 
     // MARK: - Unicode

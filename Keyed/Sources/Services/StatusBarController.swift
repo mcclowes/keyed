@@ -15,7 +15,8 @@ final class StatusBarController {
         settingsManager: SettingsManager,
         snippetStore: SnippetStore,
         accessibilityService: AccessibilityService,
-        expansionEngine: ExpansionEngine?
+        expansionEngine: ExpansionEngine?,
+        modelContainer: ModelContainer
     ) {
         self.settingsManager = settingsManager
         self.accessibilityService = accessibilityService
@@ -39,6 +40,9 @@ final class StatusBarController {
         .environment(settingsManager)
         .environment(snippetStore)
         .environment(accessibilityService)
+        // Attach the SwiftData container so any future @Query inside the popover has a context.
+        // (The current implementation reads from SnippetStore, but this defends against regressions.)
+        .modelContainer(modelContainer)
 
         popover.contentViewController = NSHostingController(rootView: popoverView)
 

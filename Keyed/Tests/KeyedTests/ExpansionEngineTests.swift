@@ -103,7 +103,8 @@ final class ExpansionEngineTests: XCTestCase {
 
     func test_boundaryKey_resetsBuffer() async {
         typeString(":ema")
-        engine.handleKeystrokeForTesting(.boundaryKey)
+        monitor.simulateKeystroke(.boundaryKey)
+        await waitForInjector()
         typeString("il")
         await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
@@ -113,7 +114,8 @@ final class ExpansionEngineTests: XCTestCase {
 
     func test_modifiedKey_doesNotAffectBuffer() async {
         typeString(":emai")
-        engine.handleKeystrokeForTesting(.modifiedKey)
+        monitor.simulateKeystroke(.modifiedKey)
+        await waitForInjector()
         typeString("l")
         await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
@@ -123,7 +125,8 @@ final class ExpansionEngineTests: XCTestCase {
 
     func test_backspace_removesFromBuffer() async {
         typeString(":emaix")
-        engine.handleKeystrokeForTesting(.backspace)
+        monitor.simulateKeystroke(.backspace)
+        await waitForInjector()
         typeString("l")
         await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
@@ -216,7 +219,7 @@ final class ExpansionEngineTests: XCTestCase {
 
     private func typeString(_ text: String) {
         for char in text {
-            engine.handleKeystrokeForTesting(.character(String(char)))
+            monitor.simulateKeystroke(.character(String(char)))
         }
     }
 

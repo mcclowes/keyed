@@ -26,12 +26,29 @@ final class AccessibilityService: AccessibilityChecking {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                // The system notification can fire fractionally before AXIsProcessTrusted
-                // reflects the new state, so give it a beat before refreshing.
-                try? await Task.sleep(for: .milliseconds(150))
-                self?.refresh()
+                await self?.awaitTrustChange()
             }
         }
+    }
+
+    /// Polls `AXIsProcessTrusted` until it disagrees with the cached value or a short
+    /// deadline elapses. Replaces a fixed 150ms sleep that was racy on slower machines.
+    /// The poll interval doubles each step (20ms → 40ms → …) capped at ~640ms so the
+    /// first change is picked up quickly and no single sleep is load-bearing.
+    private func awaitTrustChange(maxTotalMilliseconds: Int = 2000) async {
+        var elapsed = 0
+        var interval = 20
+        while elapsed < maxTotalMilliseconds {
+            let current = AXIsProcessTrusted()
+            if current != isTrusted {
+                refresh()
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(interval))
+            elapsed += interval
+            interval = min(interval * 2, 640)
+        }
+        refresh()
     }
 
     func refresh() {

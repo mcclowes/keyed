@@ -50,27 +50,59 @@ final class UnicodeEventTextInjector: TextInjecting, @unchecked Sendable {
         up.post(tap: .cghidEventTap)
     }
 
-    /// Sends a string as a single keyboard event whose payload is the Unicode text.
-    /// Chunked to avoid hitting the 20-character limit some apps impose per event.
     private func postUnicodeString(_ string: String) {
-        let chunkSize = 20
-        let utf16 = Array(string.utf16)
-        var index = 0
-        while index < utf16.count {
-            let end = min(index + chunkSize, utf16.count)
-            let chunk = Array(utf16[index..<end])
-            guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true) else {
-                logger.error("Failed to allocate CGEvent for unicode string chunk")
-                return
-            }
-            chunk.withUnsafeBufferPointer { buffer in
-                event.keyboardSetUnicodeString(
-                    stringLength: buffer.count,
-                    unicodeString: buffer.baseAddress
-                )
-            }
-            event.post(tap: .cghidEventTap)
-            index = end
+        for chunk in Self.chunkUTF16(string, maxUTF16PerEvent: Self.maxUTF16PerEvent) {
+            postUTF16Chunk(chunk)
         }
+    }
+
+    /// Maximum UTF-16 code units allowed per synthetic event. Some apps impose this cap.
+    static let maxUTF16PerEvent = 20
+
+    /// Splits `string` into UTF-16 chunks whose boundaries land on grapheme clusters so that
+    /// surrogate pairs, combining marks, and ZWJ sequences are never broken mid-character.
+    /// A single grapheme that is itself longer than `maxUTF16PerEvent` (rare — some ZWJ emoji
+    /// sequences) is emitted whole in its own chunk rather than split.
+    static func chunkUTF16(_ string: String, maxUTF16PerEvent: Int) -> [[UniChar]] {
+        guard maxUTF16PerEvent > 0 else { return [] }
+        var chunks: [[UniChar]] = []
+        var pending: [UniChar] = []
+        pending.reserveCapacity(maxUTF16PerEvent)
+
+        for character in string {
+            let clusterUTF16 = Array(String(character).utf16)
+
+            if !pending.isEmpty, pending.count + clusterUTF16.count > maxUTF16PerEvent {
+                chunks.append(pending)
+                pending.removeAll(keepingCapacity: true)
+            }
+
+            if clusterUTF16.count > maxUTF16PerEvent {
+                chunks.append(clusterUTF16)
+                continue
+            }
+
+            pending.append(contentsOf: clusterUTF16)
+        }
+
+        if !pending.isEmpty {
+            chunks.append(pending)
+        }
+        return chunks
+    }
+
+    private func postUTF16Chunk(_ chunk: [UniChar]) {
+        guard !chunk.isEmpty else { return }
+        guard let event = CGEvent(keyboardEventSource: nil, virtualKey: 0, keyDown: true) else {
+            logger.error("Failed to allocate CGEvent for unicode string chunk")
+            return
+        }
+        chunk.withUnsafeBufferPointer { buffer in
+            event.keyboardSetUnicodeString(
+                stringLength: buffer.count,
+                unicodeString: buffer.baseAddress
+            )
+        }
+        event.post(tap: .cghidEventTap)
     }
 }

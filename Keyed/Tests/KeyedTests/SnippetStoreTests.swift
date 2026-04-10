@@ -292,7 +292,7 @@ final class SnippetStoreTests: XCTestCase {
         _ = try store.addSnippet(abbreviation: ":b", expansion: "bbb", label: "", groupID: nil)
         try store.setPinned(pinned, isPinned: true)
 
-        let result = store.pinnedSnippets()
+        let result = store.pinnedSnippets
         XCTAssertEqual(result.count, 1)
         XCTAssertEqual(result.first?.abbreviation, ":a")
     }
@@ -305,7 +305,7 @@ final class SnippetStoreTests: XCTestCase {
         try store.setPinned(second, isPinned: true)
         try store.setPinned(third, isPinned: true)
 
-        let result = store.pinnedSnippets()
+        let result = store.pinnedSnippets
         XCTAssertEqual(result.map(\.abbreviation), [":b", ":a", ":c"])
     }
 
@@ -318,7 +318,7 @@ final class SnippetStoreTests: XCTestCase {
         )
         try store.setPinned(snippet, isPinned: true)
         try store.deleteSnippet(snippet)
-        XCTAssertTrue(store.pinnedSnippets().isEmpty)
+        XCTAssertTrue(store.pinnedSnippets.isEmpty)
     }
 
     func test_setPinned_idempotent() throws {

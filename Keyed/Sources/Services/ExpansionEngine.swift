@@ -86,7 +86,7 @@ final class ExpansionEngine {
         case .backspace:
             buffer.backspace()
 
-        case .boundaryKey:
+        case .boundaryKey, .tapReset:
             buffer.reset()
 
         case .modifiedKey:
@@ -103,24 +103,29 @@ final class ExpansionEngine {
         let casePattern = CaseTransform.detect(typed: typed, abbreviation: matched)
         let caseExpansion = CaseTransform.apply(casePattern, to: expansion)
 
-        let cursorOffset = placeholderResolver.cursorOffset(in: caseExpansion)
-        let resolvedExpansion = placeholderResolver.resolve(placeholderResolver.stripCursorPlaceholder(caseExpansion))
+        let resolved = placeholderResolver.resolveWithCursor(caseExpansion)
 
         logger.info("Expanding \(matched.count, privacy: .public) char abbreviation")
         isExpanding = true
         buffer.reset()
 
         let matchedCharCount = matched.count
+        // Disable the tap while we inject so our synthetic events cannot feed back into
+        // the buffer, then re-enable it once injection has fully drained. The isExpanding
+        // flag is a belt-and-braces guard in case pause/resume races with a late-arriving
+        // event that was already in the queue when we disabled the tap.
+        monitor.pause()
         Task { [weak self] in
             guard let self else { return }
             await injector.replaceText(
                 abbreviationLength: matchedCharCount,
-                expansion: resolvedExpansion,
-                cursorOffset: cursorOffset
+                expansion: resolved.text,
+                cursorOffset: resolved.cursorOffset
             )
             await MainActor.run {
+                self.monitor.resume()
                 self.isExpanding = false
-                self.delegate?.expansionEngine(self, didExpand: matched, to: resolvedExpansion)
+                self.delegate?.expansionEngine(self, didExpand: matched, to: resolved.text)
             }
         }
     }
@@ -129,25 +134,36 @@ final class ExpansionEngine {
     /// requiring a typed abbreviation. Used by the menu bar pinned-snippets feature.
     /// Resolves placeholders and honors `{cursor}` positioning, but does not apply
     /// case transformation (there is no typed input to derive a case from).
-    func injectSnippet(_ snippet: Snippet) async {
-        let expansion = snippet.expansion
-        let cursorOffset = placeholderResolver.cursorOffset(in: expansion)
-        let resolved = placeholderResolver.resolve(placeholderResolver.stripCursorPlaceholder(expansion))
+    ///
+    /// Returns `true` if the snippet was actually injected. The call is a no-op when the
+    /// engine is disabled or the frontmost app is on the exclusion list — UI callers can
+    /// use the return value to surface an explanation.
+    @discardableResult
+    func injectSnippet(_ snippet: Snippet) async -> Bool {
+        guard isEnabled else {
+            logger.info("injectSnippet skipped: engine disabled")
+            return false
+        }
+        if let bundleID = NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+           excludedBundleIDs.contains(bundleID)
+        {
+            logger.info("injectSnippet skipped: frontmost app excluded")
+            return false
+        }
+
+        let resolved = placeholderResolver.resolveWithCursor(snippet.expansion)
 
         isExpanding = true
         buffer.reset()
+        monitor.pause()
         await injector.replaceText(
             abbreviationLength: 0,
-            expansion: resolved,
-            cursorOffset: cursorOffset
+            expansion: resolved.text,
+            cursorOffset: resolved.cursorOffset
         )
+        monitor.resume()
         isExpanding = false
-        delegate?.expansionEngine(self, didExpand: snippet.abbreviation, to: resolved)
+        delegate?.expansionEngine(self, didExpand: snippet.abbreviation, to: resolved.text)
+        return true
     }
-
-    #if DEBUG
-        func handleKeystrokeForTesting(_ event: KeystrokeEvent) {
-            handleKeystroke(event)
-        }
-    #endif
 }

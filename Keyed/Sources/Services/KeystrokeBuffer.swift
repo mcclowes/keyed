@@ -5,6 +5,12 @@ struct KeystrokeBuffer {
     private var storage: [Character]
     private var head: Int = 0
     private var size: Int = 0
+    /// Set to true the first time the buffer overflows. Once the ring has wrapped we can no
+    /// longer trust that "the suffix fills the entire buffer" means "the suffix starts a new
+    /// word" — the oldest slot holds whatever the user typed 128 characters ago, and that
+    /// is almost certainly in the middle of a word. We track this so the word-boundary check
+    /// can reject overflowed matches conservatively.
+    private var hasWrapped: Bool = false
     let capacity: Int
 
     init(capacity: Int) {
@@ -26,6 +32,7 @@ struct KeystrokeBuffer {
         } else {
             storage[head] = character
             head = (head + 1) % capacity
+            hasWrapped = true
         }
     }
 
@@ -41,6 +48,7 @@ struct KeystrokeBuffer {
     mutating func reset() {
         head = 0
         size = 0
+        hasWrapped = false
     }
 
     var contents: String {
@@ -90,16 +98,14 @@ struct KeystrokeBuffer {
         return result
     }
 
-    func firstMatch(from abbreviations: Set<String>) -> String? {
-        abbreviations.first { hasSuffix($0) }
-    }
-
-    func firstMatchCaseInsensitive(from abbreviations: Set<String>) -> String? {
-        abbreviations.first { hasSuffixCaseInsensitive($0) }
-    }
-
-    /// Walks candidates in order and returns the first whose suffix matches the buffer.
-    /// Callers are expected to pass abbreviations sorted by descending length so the longest match wins.
+    /// Returns the longest candidate whose suffix matches the buffer, preferring an exact-case
+    /// match over a case-insensitive one at the same length. Callers must pass `candidates`
+    /// sorted by descending length: the two-pass walk relies on that ordering to guarantee
+    /// the longest match wins under each comparator.
+    ///
+    /// Two passes (exact then insensitive) rather than a single interleaved walk so that
+    /// `["ABC", "abc"]` on input `"abc"` returns `"abc"` (exact) rather than whichever
+    /// candidate happened to come first in the list.
     func longestSuffixMatch(in candidates: [String]) -> String? {
         for candidate in candidates where hasSuffix(candidate) {
             return candidate
@@ -112,10 +118,16 @@ struct KeystrokeBuffer {
 
     /// Returns true when the character immediately preceding the given suffix is a word boundary,
     /// or when the suffix sits at the start of the buffer. A word boundary is any non-alphanumeric character.
+    ///
+    /// Once the ring has wrapped, "suffix starts at the oldest slot" no longer means "suffix starts
+    /// at the beginning of input" — so we reject that case rather than risk a false expansion that
+    /// lands in the middle of a word.
     func hasWordBoundaryBefore(suffixLength: Int) -> Bool {
         guard suffixLength > 0, suffixLength <= size else { return false }
         let boundaryPosition = size - suffixLength
-        if boundaryPosition == 0 { return true }
+        if boundaryPosition == 0 {
+            return !hasWrapped
+        }
         let bufferIndex = (head + boundaryPosition - 1) % capacity
         let precedingChar = storage[bufferIndex]
         return !precedingChar.isLetter && !precedingChar.isNumber

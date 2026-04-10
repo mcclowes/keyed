@@ -20,11 +20,30 @@ final class PlaceholderResolver {
         dateTimeFormatter.timeStyle = .short
     }
 
+    /// Maximum number of characters pulled from the clipboard by `{clipboard}`.
+    /// Clipboard contents above this length are truncated rather than injected wholesale.
+    static let clipboardCharacterLimit = 10000
+
+    /// Resolution result used by callers that also need the cursor offset derived from
+    /// the *resolved* text (not the template). `cursorOffset` counts graphemes from the
+    /// end of `text` back to where the caret should land, or nil if there was no `{cursor}`.
+    struct Resolved {
+        let text: String
+        let cursorOffset: Int?
+    }
+
     func resolve(_ text: String) -> String {
-        guard containsPlaceholder(text) else { return text }
+        resolve(text, now: Date()).text
+    }
+
+    func resolveWithCursor(_ text: String) -> Resolved {
+        resolve(text, now: Date())
+    }
+
+    private func resolve(_ text: String, now: Date) -> Resolved {
+        guard mayContainPlaceholder(text) else { return Resolved(text: text, cursorOffset: nil) }
 
         var result = text
-        let now = Date()
 
         if result.contains("{datetime}") {
             result = result.replacingOccurrences(of: "{datetime}", with: dateTimeFormatter.string(from: now))
@@ -36,24 +55,30 @@ final class PlaceholderResolver {
             result = result.replacingOccurrences(of: "{time}", with: timeFormatter.string(from: now))
         }
         if result.contains("{clipboard}") {
-            let clipboardContent = NSPasteboard.general.string(forType: .string) ?? ""
+            var clipboardContent = NSPasteboard.general.string(forType: .string) ?? ""
+            if clipboardContent.count > Self.clipboardCharacterLimit {
+                clipboardContent = String(clipboardContent.prefix(Self.clipboardCharacterLimit))
+            }
             result = result.replacingOccurrences(of: "{clipboard}", with: clipboardContent)
         }
 
-        return result
+        // Measure the cursor offset AFTER placeholder resolution so that expansions whose
+        // pre-cursor text contains {date}/{datetime}/{clipboard} land the caret in the
+        // right spot regardless of how long those substitutions turn out to be.
+        let cursorOffset: Int?
+        if let cursorRange = result.range(of: "{cursor}") {
+            let afterCursor = result[cursorRange.upperBound...]
+            cursorOffset = afterCursor.count
+            result.removeSubrange(cursorRange)
+        } else {
+            cursorOffset = nil
+        }
+
+        return Resolved(text: result, cursorOffset: cursorOffset)
     }
 
-    func cursorOffset(in text: String) -> Int? {
-        guard let range = text.range(of: "{cursor}") else { return nil }
-        let afterCursor = text[range.upperBound...]
-        return afterCursor.count
-    }
-
-    func stripCursorPlaceholder(_ text: String) -> String {
-        text.replacingOccurrences(of: "{cursor}", with: "")
-    }
-
-    private func containsPlaceholder(_ text: String) -> Bool {
+    /// Cheap early-out: if there is no `{` anywhere, no placeholder can possibly match.
+    private func mayContainPlaceholder(_ text: String) -> Bool {
         text.contains("{")
     }
 }

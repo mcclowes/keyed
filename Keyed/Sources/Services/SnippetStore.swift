@@ -8,6 +8,9 @@ private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "SnippetS
 protocol SnippetStoring: AnyObject {
     var abbreviationMap: [String: String] { get }
     var excludedBundleIDs: Set<String> { get }
+    /// Cached list of pinned snippets, sorted by `pinnedSortOrder` then abbreviation.
+    /// Participates in `@Observable` tracking so SwiftUI views can read it directly.
+    var pinnedSnippets: [Snippet] { get }
 
     // Snippets
     @discardableResult
@@ -23,10 +26,10 @@ protocol SnippetStoring: AnyObject {
     func duplicateSnippet(_ snippet: Snippet) throws -> Snippet
     func incrementUsageCount(for abbreviation: String)
     func setPinned(_ snippet: Snippet, isPinned: Bool) throws
+    func flushPendingWrites()
 
     // Queries
     func allSnippets() -> [Snippet]
-    func pinnedSnippets() -> [Snippet]
     func findSnippet(byAbbreviation abbreviation: String) -> Snippet?
     func searchSnippets(query: String) -> [Snippet]
 
@@ -55,11 +58,16 @@ final class SnippetStore: SnippetStoring {
     private let modelContext: ModelContext
     private(set) var abbreviationMap: [String: String] = [:]
     private(set) var excludedBundleIDs: Set<String> = []
+    private(set) var pinnedSnippets: [Snippet] = []
+    /// Lowercase-abbreviation → cached snippet reference, used by `incrementUsageCount`
+    /// to avoid an O(n) fetch on every expansion.
+    private var snippetByLowercaseAbbreviation: [String: Snippet] = [:]
 
     init(modelContext: ModelContext) {
         self.modelContext = modelContext
         rebuildAbbreviationMap()
         rebuildExcludedBundleIDs()
+        rebuildPinnedSnippets()
     }
 
     // MARK: - Snippet CRUD
@@ -82,6 +90,7 @@ final class SnippetStore: SnippetStoring {
         modelContext.insert(snippet)
         try modelContext.save()
         rebuildAbbreviationMap()
+        rebuildPinnedSnippets()
         logger.info("Added snippet: \(trimmed, privacy: .private)")
         return snippet
     }
@@ -111,6 +120,7 @@ final class SnippetStore: SnippetStoring {
         snippet.updatedAt = .now
         try modelContext.save()
         rebuildAbbreviationMap()
+        rebuildPinnedSnippets()
     }
 
     func deleteSnippet(_ snippet: Snippet) throws {
@@ -118,6 +128,7 @@ final class SnippetStore: SnippetStoring {
         modelContext.delete(snippet)
         try modelContext.save()
         rebuildAbbreviationMap()
+        rebuildPinnedSnippets()
     }
 
     @discardableResult
@@ -141,15 +152,16 @@ final class SnippetStore: SnippetStoring {
         guard snippet.isPinned != isPinned else { return }
         snippet.isPinned = isPinned
         if isPinned {
-            let maxOrder = pinnedSnippets().map(\.pinnedSortOrder).max() ?? -1
+            let maxOrder = pinnedSnippets.map(\.pinnedSortOrder).max() ?? -1
             snippet.pinnedSortOrder = maxOrder + 1
         }
         snippet.updatedAt = .now
         try modelContext.save()
+        rebuildPinnedSnippets()
     }
 
     func incrementUsageCount(for abbreviation: String) {
-        guard let snippet = findSnippet(byAbbreviationCaseInsensitive: abbreviation) else { return }
+        guard let snippet = snippetByLowercaseAbbreviation[abbreviation.lowercased()] else { return }
         snippet.usageCount += 1
         pendingUsageWrites += 1
         if pendingUsageWrites >= usageWriteBatchSize {
@@ -174,22 +186,13 @@ final class SnippetStore: SnippetStoring {
         return (try? modelContext.fetch(descriptor)) ?? []
     }
 
-    func pinnedSnippets() -> [Snippet] {
-        let descriptor = FetchDescriptor<Snippet>(
-            predicate: #Predicate { $0.isPinned },
-            sortBy: [SortDescriptor(\.pinnedSortOrder), SortDescriptor(\.abbreviation)]
-        )
-        return (try? modelContext.fetch(descriptor)) ?? []
-    }
-
     func findSnippet(byAbbreviation abbreviation: String) -> Snippet? {
         let descriptor = FetchDescriptor<Snippet>(predicate: #Predicate { $0.abbreviation == abbreviation })
         return try? modelContext.fetch(descriptor).first
     }
 
     private func findSnippet(byAbbreviationCaseInsensitive abbreviation: String) -> Snippet? {
-        let lowered = abbreviation.lowercased()
-        return allSnippets().first { $0.abbreviation.lowercased() == lowered }
+        snippetByLowercaseAbbreviation[abbreviation.lowercased()]
     }
 
     func searchSnippets(query: String) -> [Snippet] {
@@ -311,20 +314,32 @@ final class SnippetStore: SnippetStoring {
 
     private func rebuildAbbreviationMap() {
         var map: [String: String] = [:]
+        var byLowercase: [String: Snippet] = [:]
         for snippet in allSnippets() {
             map[snippet.abbreviation] = snippet.expansion
+            byLowercase[snippet.abbreviation.lowercased()] = snippet
         }
         abbreviationMap = map
+        snippetByLowercaseAbbreviation = byLowercase
     }
 
     private func rebuildExcludedBundleIDs() {
         excludedBundleIDs = Set(allExclusions().map(\.bundleIdentifier))
     }
 
+    private func rebuildPinnedSnippets() {
+        let descriptor = FetchDescriptor<Snippet>(
+            predicate: #Predicate { $0.isPinned },
+            sortBy: [SortDescriptor(\.pinnedSortOrder), SortDescriptor(\.abbreviation)]
+        )
+        pinnedSnippets = (try? modelContext.fetch(descriptor)) ?? []
+    }
+
     /// Re-reads underlying storage and refreshes caches. Call after external writes.
     func refresh() {
         rebuildAbbreviationMap()
         rebuildExcludedBundleIDs()
+        rebuildPinnedSnippets()
     }
 }
 

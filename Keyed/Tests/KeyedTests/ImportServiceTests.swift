@@ -11,6 +11,16 @@ final class ImportServiceTests: XCTestCase {
 
     // MARK: - CSV Import
 
+    func test_parseCSV_withUTF8BOM_stripsBOMAndParsesHeader() throws {
+        // Regression for review §3 — Excel exports prefix UTF-8 files with a BOM and the
+        // pre-fix parser silently failed to find the "abbreviation" header column.
+        let csv = "\u{FEFF}abbreviation,expansion\n:email,test@example.com\n"
+        let results = try service.parseCSV(csv)
+        XCTAssertEqual(results.count, 1)
+        XCTAssertEqual(results[0].abbreviation, ":email")
+        XCTAssertEqual(results[0].expansion, "test@example.com")
+    }
+
     func test_parseCSV_basicTwoColumns_parsesCorrectly() throws {
         let csv = """
         abbreviation,expansion

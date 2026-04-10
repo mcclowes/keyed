@@ -159,9 +159,15 @@ struct OnboardingView: View {
                 .multilineTextAlignment(.center)
                 .foregroundStyle(.secondary)
             Spacer()
-            Button("Done") { dismiss() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
+            Button("Done") {
+                // Only mark onboarding as complete here — at the moment the user actually
+                // finished the flow. Setting it earlier (e.g. when the welcome window opens)
+                // would let users who quit mid-onboarding silently lose the welcome flow.
+                UserDefaults.standard.set(true, forKey: "hasCompletedOnboarding")
+                dismiss()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
         }
     }
 

@@ -36,21 +36,40 @@ final class PlaceholderResolverTests: XCTestCase {
 
     // MARK: - Cursor
 
-    func test_cursorOffset_withCursor_returnsCharsAfterCursor() {
-        let text = "Hello {cursor}, world!"
-        let offset = resolver.cursorOffset(in: text)
-        XCTAssertEqual(offset, ", world!".count)
+    func test_resolveWithCursor_withCursor_returnsCharsAfterCursor() {
+        let resolved = resolver.resolveWithCursor("Hello {cursor}, world!")
+        XCTAssertEqual(resolved.text, "Hello , world!")
+        XCTAssertEqual(resolved.cursorOffset, ", world!".count)
     }
 
-    func test_cursorOffset_noCursor_returnsNil() {
-        XCTAssertNil(resolver.cursorOffset(in: "Hello world"))
+    func test_resolveWithCursor_noCursor_returnsNilOffset() {
+        let resolved = resolver.resolveWithCursor("Hello world")
+        XCTAssertEqual(resolved.text, "Hello world")
+        XCTAssertNil(resolved.cursorOffset)
     }
 
-    func test_cursorOffset_cursorAtEnd_returnsZero() {
-        XCTAssertEqual(resolver.cursorOffset(in: "Hello{cursor}"), 0)
+    func test_resolveWithCursor_cursorAtEnd_returnsZero() {
+        let resolved = resolver.resolveWithCursor("Hello{cursor}")
+        XCTAssertEqual(resolved.text, "Hello")
+        XCTAssertEqual(resolved.cursorOffset, 0)
     }
 
-    func test_stripCursorPlaceholder_removesCursor() {
-        XCTAssertEqual(resolver.stripCursorPlaceholder("Hi {cursor}, thanks"), "Hi , thanks")
+    func test_resolveWithCursor_stripsCursor_fromMiddle() {
+        let resolved = resolver.resolveWithCursor("Hi {cursor}, thanks")
+        XCTAssertEqual(resolved.text, "Hi , thanks")
+        XCTAssertEqual(resolved.cursorOffset, ", thanks".count)
+    }
+
+    // MARK: - Cursor + placeholder interaction (regression test for review §1.2)
+
+    func test_resolveWithCursor_cursorAfterDate_offsetMeasuredAgainstResolvedText() {
+        // Cursor sits between a resolved date and a short tail. The offset must be
+        // counted against the RESOLVED string so the caret lands immediately after
+        // the date regardless of how long the date rendered.
+        let resolved = resolver.resolveWithCursor("Date: {date} {cursor}end")
+        XCTAssertNil(resolved.text.range(of: "{date}"))
+        XCTAssertNil(resolved.text.range(of: "{cursor}"))
+        XCTAssertEqual(resolved.cursorOffset, "end".count)
+        XCTAssertTrue(resolved.text.hasSuffix("end"))
     }
 }

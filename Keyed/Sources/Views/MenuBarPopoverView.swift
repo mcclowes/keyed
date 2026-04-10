@@ -1,23 +1,23 @@
-import SwiftData
 import SwiftUI
 
 struct MenuBarPopoverView: View {
     @Environment(SettingsManager.self) private var settings
     @Environment(AccessibilityService.self) private var accessibility
-    @Query private var snippets: [Snippet]
+    @Environment(SnippetStore.self) private var store
 
     let onInjectSnippet: (Snippet) -> Void
     let onOpenSystemSettings: () -> Void
 
+    /// Reads the store's cached pinned list directly. The popover is hosted through a
+    /// detached `NSHostingController` which does not carry a `ModelContainer` environment
+    /// value — `@Query` would silently return an empty result there, so we route through
+    /// the `@Observable` store instead.
     private var pinnedSnippets: [Snippet] {
-        snippets
-            .filter(\.isPinned)
-            .sorted {
-                if $0.pinnedSortOrder != $1.pinnedSortOrder {
-                    return $0.pinnedSortOrder < $1.pinnedSortOrder
-                }
-                return $0.abbreviation.localizedStandardCompare($1.abbreviation) == .orderedAscending
-            }
+        store.pinnedSnippets
+    }
+
+    private var totalSnippetCount: Int {
+        store.abbreviationMap.count
     }
 
     var body: some View {
@@ -43,7 +43,7 @@ struct MenuBarPopoverView: View {
             pinnedSection
 
             HStack {
-                Text("\(snippets.count) snippets")
+                Text("\(totalSnippetCount) snippets")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Spacer()

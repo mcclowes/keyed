@@ -5,6 +5,8 @@ final class MockKeystrokeMonitor: KeystrokeMonitoring, @unchecked Sendable {
     var onKeystroke: (@Sendable (KeystrokeEvent) -> Void)?
     var startCallCount = 0
     var stopCallCount = 0
+    var pauseCallCount = 0
+    var resumeCallCount = 0
 
     func start() {
         startCallCount += 1
@@ -12,6 +14,14 @@ final class MockKeystrokeMonitor: KeystrokeMonitoring, @unchecked Sendable {
 
     func stop() {
         stopCallCount += 1
+    }
+
+    func pause() {
+        pauseCallCount += 1
+    }
+
+    func resume() {
+        resumeCallCount += 1
     }
 
     func simulateKeystroke(_ event: KeystrokeEvent) {
