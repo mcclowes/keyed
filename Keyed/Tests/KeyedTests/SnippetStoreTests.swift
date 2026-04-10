@@ -187,6 +187,34 @@ final class SnippetStoreTests: XCTestCase {
         XCTAssertEqual(store.allExclusions().count, 1)
     }
 
+    func test_seedDefaultExclusions_addsAllEntriesOnEmptyStore() {
+        let entries = [
+            DefaultExclusions.Entry(bundleIdentifier: "com.apple.Terminal", appName: "Terminal"),
+            DefaultExclusions.Entry(bundleIdentifier: "com.bitwarden.desktop", appName: "Bitwarden"),
+        ]
+        let inserted = store.seedDefaultExclusions(entries)
+        XCTAssertEqual(inserted, 2)
+        XCTAssertTrue(store.excludedBundleIDs.contains("com.apple.Terminal"))
+        XCTAssertTrue(store.excludedBundleIDs.contains("com.bitwarden.desktop"))
+    }
+
+    func test_seedDefaultExclusions_skipsAlreadyPresent() throws {
+        _ = try store.addExclusion(bundleIdentifier: "com.apple.Terminal", appName: "Terminal")
+        let entries = [
+            DefaultExclusions.Entry(bundleIdentifier: "com.apple.Terminal", appName: "Terminal"),
+            DefaultExclusions.Entry(bundleIdentifier: "com.bitwarden.desktop", appName: "Bitwarden"),
+        ]
+        let inserted = store.seedDefaultExclusions(entries)
+        XCTAssertEqual(inserted, 1)
+        XCTAssertEqual(store.allExclusions().count, 2)
+    }
+
+    func test_seedDefaultExclusions_bundledListIsNonEmptyAndUnique() {
+        let ids = DefaultExclusions.entries.map(\.bundleIdentifier)
+        XCTAssertFalse(ids.isEmpty)
+        XCTAssertEqual(Set(ids).count, ids.count, "Default exclusion list must have unique bundle IDs")
+    }
+
     // MARK: - Pinned snippets
 
     func test_newSnippet_defaultsToUnpinned() throws {

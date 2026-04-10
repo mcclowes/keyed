@@ -59,6 +59,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        seedDefaultExclusionsIfNeeded()
+
         let monitor = CGEventTapMonitor()
         let injector = UnicodeEventTextInjector()
         let engine = ExpansionEngine(monitor: monitor, injector: injector)
@@ -93,6 +95,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         snippetStore?.flushPendingWrites()
         expansionEngine?.stop()
+    }
+
+    private func seedDefaultExclusionsIfNeeded() {
+        let key = "hasSeededDefaultExclusions"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        snippetStore.seedDefaultExclusions()
+        UserDefaults.standard.set(true, forKey: key)
     }
 
     // MARK: - Observers

@@ -41,6 +41,8 @@ protocol SnippetStoring: AnyObject {
     @discardableResult
     func addExclusion(bundleIdentifier: String, appName: String) throws -> AppExclusion
     func removeExclusion(_ exclusion: AppExclusion) throws
+    @discardableResult
+    func seedDefaultExclusions(_ entries: [DefaultExclusions.Entry]) -> Int
 }
 
 @MainActor
@@ -251,6 +253,27 @@ final class SnippetStore: SnippetStoring {
         modelContext.delete(exclusion)
         try modelContext.save()
         rebuildExcludedBundleIDs()
+    }
+
+    /// Adds the given entries, skipping any bundle ID that already exists.
+    /// Returns the number of new exclusions actually inserted.
+    @discardableResult
+    func seedDefaultExclusions(_ entries: [DefaultExclusions.Entry] = DefaultExclusions.entries) -> Int {
+        let existing = Set(allExclusions().map(\.bundleIdentifier))
+        var inserted = 0
+        for entry in entries where !existing.contains(entry.bundleIdentifier) {
+            modelContext.insert(AppExclusion(bundleIdentifier: entry.bundleIdentifier, appName: entry.appName))
+            inserted += 1
+        }
+        guard inserted > 0 else { return 0 }
+        do {
+            try modelContext.save()
+            rebuildExcludedBundleIDs()
+            logger.info("Seeded \(inserted, privacy: .public) default exclusions")
+        } catch {
+            logger.error("Failed to seed default exclusions: \(error.localizedDescription, privacy: .public)")
+        }
+        return inserted
     }
 
     // MARK: - Caches
