@@ -210,7 +210,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 onChange()
-                self.observeForever(track: track, onChange: onChange)
+                observeForever(track: track, onChange: onChange)
             }
         }
     }
