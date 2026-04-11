@@ -7,8 +7,8 @@ final class SnippetStoreTests: XCTestCase {
     private var store: SnippetStore!
     private var container: ModelContainer!
 
-    override func setUpWithError() throws {
-        try super.setUpWithError()
+    override func setUp() async throws {
+        try await super.setUp()
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         container = try ModelContainer(
             for: Snippet.self,

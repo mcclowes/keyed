@@ -7,8 +7,8 @@ final class ExpansionEngineTests: XCTestCase {
     private var injector: MockTextInjector!
     private var engine: ExpansionEngine!
 
-    override func setUp() {
-        super.setUp()
+    override func setUp() async throws {
+        try await super.setUp()
         monitor = MockKeystrokeMonitor()
         injector = MockTextInjector()
         engine = ExpansionEngine(monitor: monitor, injector: injector, bufferCapacity: 64)
@@ -16,9 +16,9 @@ final class ExpansionEngineTests: XCTestCase {
         engine.start()
     }
 
-    override func tearDown() {
+    override func tearDown() async throws {
         engine.stop()
-        super.tearDown()
+        try await super.tearDown()
     }
 
     // MARK: - Basic expansion
