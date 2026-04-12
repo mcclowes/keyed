@@ -14,6 +14,19 @@ settings:
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_HARDENED_RUNTIME: YES
 
+schemes:
+  Keyed:
+    build:
+      targets:
+        Keyed: all
+        KeyedTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - KeyedTests
+
 targets:
   Keyed:
     type: application
