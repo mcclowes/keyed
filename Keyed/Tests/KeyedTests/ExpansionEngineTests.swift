@@ -17,7 +17,6 @@ final class ExpansionEngineTests: XCTestCase {
 
     override func tearDown() async throws {
         engine.stop()
-        try await super.tearDown()
     }
 
     // MARK: - Basic expansion
