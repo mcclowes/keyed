@@ -8,7 +8,6 @@ final class SnippetStoreTests: XCTestCase {
     private var container: ModelContainer!
 
     override func setUp() async throws {
-        try await super.setUp()
         let config = ModelConfiguration(isStoredInMemoryOnly: true)
         container = try ModelContainer(
             for: Snippet.self,
