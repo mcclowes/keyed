@@ -7,7 +7,7 @@ build: generate
 	xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Debug build
 
 test: generate
-	xcodebuild -project Keyed.xcodeproj -scheme KeyedTests -configuration Debug test
+	xcodebuild -project Keyed.xcodeproj -scheme Keyed -destination 'platform=macOS' test
 
 clean:
 	rm -rf DerivedData build
