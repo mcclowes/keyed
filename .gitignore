@@ -33,3 +33,7 @@ Keyed/Config/Keyed.local.xcconfig
 *.ipa
 *.dSYM.zip
 *.dSYM
+
+# Coverage
+*.profraw
+*.profdata
