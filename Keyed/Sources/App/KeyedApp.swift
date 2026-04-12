@@ -220,34 +220,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             track: { [weak self] in _ = self?.settingsManager.isEnabled },
             onChange: { [weak self] in
                 guard let self else { return }
-                expansionEngine?.setEnabled(settingsManager.isEnabled)
+                self.expansionEngine?.setEnabled(self.settingsManager.isEnabled)
             }
         )
         observeForever(
             track: { [weak self] in _ = self?.snippetStore.abbreviationMap },
             onChange: { [weak self] in
                 guard let self else { return }
-                expansionEngine?.updateAbbreviations(snippetStore.abbreviationMap)
+                self.expansionEngine?.updateAbbreviations(self.snippetStore.abbreviationMap)
             }
         )
         observeForever(
             track: { [weak self] in _ = self?.snippetStore.excludedBundleIDs },
             onChange: { [weak self] in
                 guard let self else { return }
-                expansionEngine?.updateExcludedApps(snippetStore.excludedBundleIDs)
+                self.expansionEngine?.updateExcludedApps(self.snippetStore.excludedBundleIDs)
             }
         )
         observeForever(
             track: { [weak self] in _ = self?.accessibilityService.isTrusted },
             onChange: { [weak self] in
                 guard let self else { return }
-                if accessibilityService.isTrusted {
-                    expansionEngine?.start()
-                    onboardingWindow?.close()
+                if self.accessibilityService.isTrusted {
+                    self.expansionEngine?.start()
+                    self.onboardingWindow?.close()
                 } else {
-                    expansionEngine?.stop()
+                    self.expansionEngine?.stop()
                     if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-                        showOnboarding(initialStep: .accessibility)
+                        self.showOnboarding(initialStep: .accessibility)
                     }
                 }
             }
