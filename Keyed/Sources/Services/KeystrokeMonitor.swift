@@ -18,6 +18,12 @@ enum KeystrokeEvent {
 
 protocol KeystrokeMonitoring: AnyObject, Sendable {
     var onKeystroke: (@Sendable (KeystrokeEvent) -> Void)? { get set }
+    /// Invoked asynchronously on the main queue when tap creation fails — almost always because
+    /// Accessibility permission is not (yet) in force for this process. Lets the caller retry
+    /// once trust changes rather than silently remaining dead.
+    var onTapCreationFailed: (@Sendable () -> Void)? { get set }
+    /// True when a live CGEventTap is currently installed.
+    var isRunning: Bool { get }
     func start()
     func stop()
     /// Temporarily disables the tap so injected synthetic events cannot feed back into
@@ -51,6 +57,26 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
             defer { stateLock.unlock() }
             _onKeystroke = newValue
         }
+    }
+
+    private var _onTapCreationFailed: (@Sendable () -> Void)?
+    var onTapCreationFailed: (@Sendable () -> Void)? {
+        get {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            return _onTapCreationFailed
+        }
+        set {
+            stateLock.lock()
+            defer { stateLock.unlock() }
+            _onTapCreationFailed = newValue
+        }
+    }
+
+    var isRunning: Bool {
+        stateLock.lock()
+        defer { stateLock.unlock() }
+        return eventTap != nil
     }
 
     func start() {
@@ -92,8 +118,12 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
                 self.stateLock.lock()
                 self.retainedSelf = nil
                 self.monitorQueue = nil
+                let failureHandler = self._onTapCreationFailed
                 self.stateLock.unlock()
                 retained.release()
+                if let failureHandler {
+                    DispatchQueue.main.async { failureHandler() }
+                }
                 return
             }
 

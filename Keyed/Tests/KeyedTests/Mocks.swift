@@ -3,10 +3,14 @@ import Foundation
 
 final class MockKeystrokeMonitor: KeystrokeMonitoring, @unchecked Sendable {
     var onKeystroke: (@Sendable (KeystrokeEvent) -> Void)?
+    var onTapCreationFailed: (@Sendable () -> Void)?
     var startCallCount = 0
     var stopCallCount = 0
     var pauseCallCount = 0
     var resumeCallCount = 0
+    var isRunning: Bool {
+        startCallCount > stopCallCount
+    }
 
     func start() {
         startCallCount += 1

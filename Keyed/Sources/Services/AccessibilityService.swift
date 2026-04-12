@@ -16,6 +16,7 @@ protocol AccessibilityChecking: AnyObject {
 @Observable
 final class AccessibilityService: AccessibilityChecking {
     private(set) var isTrusted: Bool
+    private var pollTimer: Timer?
 
     init() {
         isTrusted = AXIsProcessTrusted()
@@ -29,6 +30,37 @@ final class AccessibilityService: AccessibilityChecking {
                 await self?.awaitTrustChange()
             }
         }
+        // The distributed notification above is unreliable on recent macOS (silently dropped
+        // in some releases). Re-check trust whenever the user brings Keyed back to the front —
+        // that's the most common moment after granting permission in System Settings.
+        NotificationCenter.default.addObserver(
+            forName: NSApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refresh()
+            }
+        }
+        startPollingIfNeeded()
+    }
+
+    /// Backstop for when the distributed notification is not delivered. Polls every 2s while
+    /// trust is missing; stops automatically once trust is granted. Refresh is cheap (one TCC
+    /// syscall) so the overhead is negligible and the loop runs only in the pre-trust window.
+    private func startPollingIfNeeded() {
+        guard !isTrusted, pollTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.refresh()
+            }
+        }
+        pollTimer = timer
+    }
+
+    private func stopPolling() {
+        pollTimer?.invalidate()
+        pollTimer = nil
     }
 
     /// Polls `AXIsProcessTrusted` until it disagrees with the cached value or a short
@@ -56,6 +88,11 @@ final class AccessibilityService: AccessibilityChecking {
         if trusted != isTrusted {
             logger.info("Accessibility trust changed to \(trusted, privacy: .public)")
             isTrusted = trusted
+        }
+        if trusted {
+            stopPolling()
+        } else {
+            startPollingIfNeeded()
         }
     }
 

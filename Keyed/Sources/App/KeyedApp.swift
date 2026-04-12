@@ -137,6 +137,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         engine.delegate = self
         expansionEngine = engine
 
+        // If the event tap fails to install (almost always a permission issue that AXIsProcessTrusted
+        // didn't reflect yet), force the accessibility service to re-check so the trust observer can
+        // fire once TCC catches up.
+        monitor.onTapCreationFailed = { [weak self] in
+            Task { @MainActor [weak self] in
+                self?.accessibilityService.refresh()
+            }
+        }
+
         statusBarController = StatusBarController(
             settingsManager: settingsManager,
             snippetStore: snippetStore,
@@ -210,7 +219,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 onChange()
-                self.observeForever(track: track, onChange: onChange)
+                observeForever(track: track, onChange: onChange)
             }
         }
     }
@@ -220,34 +229,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             track: { [weak self] in _ = self?.settingsManager.isEnabled },
             onChange: { [weak self] in
                 guard let self else { return }
-                self.expansionEngine?.setEnabled(self.settingsManager.isEnabled)
+                expansionEngine?.setEnabled(settingsManager.isEnabled)
             }
         )
         observeForever(
             track: { [weak self] in _ = self?.snippetStore.abbreviationMap },
             onChange: { [weak self] in
                 guard let self else { return }
-                self.expansionEngine?.updateAbbreviations(self.snippetStore.abbreviationMap)
+                expansionEngine?.updateAbbreviations(snippetStore.abbreviationMap)
             }
         )
         observeForever(
             track: { [weak self] in _ = self?.snippetStore.excludedBundleIDs },
             onChange: { [weak self] in
                 guard let self else { return }
-                self.expansionEngine?.updateExcludedApps(self.snippetStore.excludedBundleIDs)
+                expansionEngine?.updateExcludedApps(snippetStore.excludedBundleIDs)
             }
         )
         observeForever(
             track: { [weak self] in _ = self?.accessibilityService.isTrusted },
             onChange: { [weak self] in
                 guard let self else { return }
-                if self.accessibilityService.isTrusted {
-                    self.expansionEngine?.start()
-                    self.onboardingWindow?.close()
+                if accessibilityService.isTrusted {
+                    expansionEngine?.start()
+                    onboardingWindow?.close()
                 } else {
-                    self.expansionEngine?.stop()
+                    expansionEngine?.stop()
                     if UserDefaults.standard.bool(forKey: "hasCompletedOnboarding") {
-                        self.showOnboarding(initialStep: .accessibility)
+                        showOnboarding(initialStep: .accessibility)
                     }
                 }
             }
