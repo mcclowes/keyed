@@ -11,7 +11,7 @@ final class ExpansionEngineTests: XCTestCase {
         monitor = MockKeystrokeMonitor()
         injector = MockTextInjector()
         engine = ExpansionEngine(monitor: monitor, injector: injector, bufferCapacity: 64)
-        engine.updateAbbreviations([":email": "test@example.com", ":sig": "Best regards,\nJohn"])
+        engine.updateAbbreviations(makeMap([":email": "test@example.com", ":sig": "Best regards,\nJohn"]))
         engine.start()
     }
 
@@ -46,21 +46,21 @@ final class ExpansionEngineTests: XCTestCase {
     func test_abbreviationInsideWord_doesNotExpand() async {
         // ":email" sits after "a" (a letter). No word boundary before ":", so no expansion.
         // (Abbreviation starts with ":" which is itself non-alphanumeric, so the preceding char matters.)
-        engine.updateAbbreviations(["foo": "bar"])
+        engine.updateAbbreviations(makeMap(["foo": "bar"]))
         typeString("xfoo")
         await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
     }
 
     func test_abbreviationAfterSpace_expands() async {
-        engine.updateAbbreviations(["foo": "bar"])
+        engine.updateAbbreviations(makeMap(["foo": "bar"]))
         typeString("x foo")
         await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
     }
 
     func test_abbreviationAtBufferStart_expands() async {
-        engine.updateAbbreviations(["foo": "bar"])
+        engine.updateAbbreviations(makeMap(["foo": "bar"]))
         typeString("foo")
         await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
@@ -73,7 +73,7 @@ final class ExpansionEngineTests: XCTestCase {
     /// typing ":signature". True longest-match would need the engine to wait for a terminator.
     /// Documenting current behavior here as a regression guard.
     func test_ambiguousAbbreviations_shorterFiresFirst() async {
-        engine.updateAbbreviations([":sig": "short", ":signature": "long"])
+        engine.updateAbbreviations(makeMap([":sig": "short", ":signature": "long"]))
         typeString(":sig")
         await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
@@ -145,7 +145,7 @@ final class ExpansionEngineTests: XCTestCase {
     // MARK: - Abbreviation updates
 
     func test_updateAbbreviations_newMapTakesPrecedence() async {
-        engine.updateAbbreviations([":hi": "Hello there!"])
+        engine.updateAbbreviations(makeMap([":hi": "Hello there!"]))
         typeString(":hi")
         await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
@@ -153,7 +153,7 @@ final class ExpansionEngineTests: XCTestCase {
     }
 
     func test_updateAbbreviations_oldAbbreviationsNoLongerWork() async {
-        engine.updateAbbreviations([":hi": "Hello there!"])
+        engine.updateAbbreviations(makeMap([":hi": "Hello there!"]))
         typeString(":email")
         await waitForInjector()
         XCTAssertTrue(injector.replaceTextCalls.isEmpty)
@@ -169,7 +169,7 @@ final class ExpansionEngineTests: XCTestCase {
     }
 
     func test_titleCaseAbbreviation_expandsInTitleCase() async {
-        engine.updateAbbreviations([":sig": "best regards"])
+        engine.updateAbbreviations(makeMap([":sig": "best regards"]))
         typeString(":Sig")
         await waitForInjector()
         XCTAssertEqual(injector.replaceTextCalls.count, 1)
@@ -213,12 +213,75 @@ final class ExpansionEngineTests: XCTestCase {
         XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "pinned text")
     }
 
+    // MARK: - Delimiter-required expansion
+
+    func test_requiresDelimiter_doesNotExpandImmediately() async {
+        engine.updateAbbreviations(makeMap(["teh": "the"], requiresDelimiter: true))
+        typeString("teh")
+        await waitForInjector()
+        XCTAssertTrue(injector.replaceTextCalls.isEmpty)
+    }
+
+    func test_requiresDelimiter_expandsAfterSpace() async {
+        engine.updateAbbreviations(makeMap(["teh": "the"], requiresDelimiter: true))
+        typeString("teh ")
+        await waitForInjector()
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "the ")
+        XCTAssertEqual(injector.replaceTextCalls.first?.abbreviationLength, 4)
+    }
+
+    func test_requiresDelimiter_expandsAfterPunctuation() async {
+        engine.updateAbbreviations(makeMap(["teh": "the"], requiresDelimiter: true))
+        typeString("teh.")
+        await waitForInjector()
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        XCTAssertEqual(injector.replaceTextCalls.first?.expansion, "the.")
+    }
+
+    func test_requiresDelimiter_doesNotExpandInsideWord() async {
+        // The motivating case: "teh" inside "tehran" must not expand because no delimiter
+        // follows "teh" before letters continue.
+        engine.updateAbbreviations(makeMap(["teh": "the"], requiresDelimiter: true))
+        typeString("tehran ")
+        await waitForInjector()
+        XCTAssertTrue(injector.replaceTextCalls.isEmpty)
+    }
+
+    func test_requiresDelimiter_stillRequiresWordBoundaryBefore() async {
+        // Abbreviation mid-word (letter before it) must not fire even with a trailing delimiter.
+        engine.updateAbbreviations(makeMap(["teh": "the"], requiresDelimiter: true))
+        typeString("xteh ")
+        await waitForInjector()
+        XCTAssertTrue(injector.replaceTextCalls.isEmpty)
+    }
+
+    func test_instantAndDelimited_coexist() async {
+        engine.updateAbbreviations([
+            ":em": AbbreviationEntry(expansion: "—", requiresDelimiter: false),
+            "teh": AbbreviationEntry(expansion: "the", requiresDelimiter: true),
+        ])
+        typeString(":em")
+        await waitForInjector()
+        XCTAssertEqual(injector.replaceTextCalls.count, 1)
+        typeString("teh ")
+        await waitForInjector()
+        XCTAssertEqual(injector.replaceTextCalls.count, 2)
+        XCTAssertEqual(injector.replaceTextCalls.last?.expansion, "the ")
+    }
+
     // MARK: - Helpers
 
     private func typeString(_ text: String) {
         for char in text {
             monitor.simulateKeystroke(.character(String(char)))
         }
+    }
+
+    private func makeMap(_ pairs: [String: String], requiresDelimiter: Bool = false) -> [String: AbbreviationEntry] {
+        Dictionary(uniqueKeysWithValues: pairs.map { key, value in
+            (key, AbbreviationEntry(expansion: value, requiresDelimiter: requiresDelimiter))
+        })
     }
 
     private func waitForInjector() async {

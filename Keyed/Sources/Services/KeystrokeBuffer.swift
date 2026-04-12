@@ -60,21 +60,25 @@ struct KeystrokeBuffer {
         return result
     }
 
-    func hasSuffix(_ abbreviation: String) -> Bool {
-        suffixMatches(abbreviation, caseInsensitive: false)
+    func hasSuffix(_ abbreviation: String, endOffset: Int = 0) -> Bool {
+        suffixMatches(abbreviation, caseInsensitive: false, endOffset: endOffset)
     }
 
-    func hasSuffixCaseInsensitive(_ abbreviation: String) -> Bool {
-        suffixMatches(abbreviation, caseInsensitive: true)
+    func hasSuffixCaseInsensitive(_ abbreviation: String, endOffset: Int = 0) -> Bool {
+        suffixMatches(abbreviation, caseInsensitive: true, endOffset: endOffset)
     }
 
-    private func suffixMatches(_ abbreviation: String, caseInsensitive: Bool) -> Bool {
+    /// `endOffset` lets callers match against a window ending N characters before the tail —
+    /// used when the most recently typed character is a delimiter and the abbreviation sits
+    /// just behind it.
+    private func suffixMatches(_ abbreviation: String, caseInsensitive: Bool, endOffset: Int) -> Bool {
         let abbrevChars = Array(abbreviation)
         let abbrevCount = abbrevChars.count
-        guard abbrevCount <= size else { return false }
+        let effectiveSize = size - endOffset
+        guard endOffset >= 0, abbrevCount <= effectiveSize else { return false }
 
         for i in 0..<abbrevCount {
-            let bufferIndex = (head + size - abbrevCount + i) % capacity
+            let bufferIndex = (head + effectiveSize - abbrevCount + i) % capacity
             let lhs = storage[bufferIndex]
             let rhs = abbrevChars[i]
             if caseInsensitive {
@@ -87,12 +91,14 @@ struct KeystrokeBuffer {
     }
 
     /// Returns the typed text matching the tail of the buffer for the given abbreviation length.
-    func typedSuffix(length: Int) -> String {
-        guard length <= size else { return "" }
+    /// `endOffset` skips the final N characters when the caller has a delimiter trailing the abbreviation.
+    func typedSuffix(length: Int, endOffset: Int = 0) -> String {
+        let effectiveSize = size - endOffset
+        guard endOffset >= 0, length <= effectiveSize else { return "" }
         var result = ""
         result.reserveCapacity(length)
         for i in 0..<length {
-            let bufferIndex = (head + size - length + i) % capacity
+            let bufferIndex = (head + effectiveSize - length + i) % capacity
             result.append(storage[bufferIndex])
         }
         return result
@@ -106,11 +112,11 @@ struct KeystrokeBuffer {
     /// Two passes (exact then insensitive) rather than a single interleaved walk so that
     /// `["ABC", "abc"]` on input `"abc"` returns `"abc"` (exact) rather than whichever
     /// candidate happened to come first in the list.
-    func longestSuffixMatch(in candidates: [String]) -> String? {
-        for candidate in candidates where hasSuffix(candidate) {
+    func longestSuffixMatch(in candidates: [String], endOffset: Int = 0) -> String? {
+        for candidate in candidates where hasSuffix(candidate, endOffset: endOffset) {
             return candidate
         }
-        for candidate in candidates where hasSuffixCaseInsensitive(candidate) {
+        for candidate in candidates where hasSuffixCaseInsensitive(candidate, endOffset: endOffset) {
             return candidate
         }
         return nil
@@ -122,9 +128,10 @@ struct KeystrokeBuffer {
     /// Once the ring has wrapped, "suffix starts at the oldest slot" no longer means "suffix starts
     /// at the beginning of input" — so we reject that case rather than risk a false expansion that
     /// lands in the middle of a word.
-    func hasWordBoundaryBefore(suffixLength: Int) -> Bool {
-        guard suffixLength > 0, suffixLength <= size else { return false }
-        let boundaryPosition = size - suffixLength
+    func hasWordBoundaryBefore(suffixLength: Int, endOffset: Int = 0) -> Bool {
+        let effectiveSize = size - endOffset
+        guard endOffset >= 0, suffixLength > 0, suffixLength <= effectiveSize else { return false }
+        let boundaryPosition = effectiveSize - suffixLength
         if boundaryPosition == 0 {
             return !hasWrapped
         }
