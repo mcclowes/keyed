@@ -8,7 +8,6 @@ final class ExpansionEngineTests: XCTestCase {
     private var engine: ExpansionEngine!
 
     override func setUp() async throws {
-        try await super.setUp()
         monitor = MockKeystrokeMonitor()
         injector = MockTextInjector()
         engine = ExpansionEngine(monitor: monitor, injector: injector, bufferCapacity: 64)
