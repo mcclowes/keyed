@@ -220,4 +220,34 @@ final class KeystrokeBufferTests: XCTestCase {
         buffer.backspace()
         XCTAssertEqual(buffer.contents, "")
     }
+
+    // MARK: - endOffset (delimiter-trailing match)
+
+    func test_hasSuffix_withEndOffset_ignoresTrailingChar() {
+        var buffer = KeystrokeBuffer(capacity: 16)
+        buffer.append("teh ")
+        XCTAssertFalse(buffer.hasSuffix("teh"))
+        XCTAssertTrue(buffer.hasSuffix("teh", endOffset: 1))
+    }
+
+    func test_longestSuffixMatch_withEndOffset_matchesBeforeDelimiter() {
+        var buffer = KeystrokeBuffer(capacity: 16)
+        buffer.append("teh.")
+        XCTAssertEqual(buffer.longestSuffixMatch(in: ["teh"], endOffset: 1), "teh")
+    }
+
+    func test_typedSuffix_withEndOffset_excludesTrailingChar() {
+        var buffer = KeystrokeBuffer(capacity: 16)
+        buffer.append("TEH ")
+        XCTAssertEqual(buffer.typedSuffix(length: 3, endOffset: 1), "TEH")
+    }
+
+    func test_hasWordBoundaryBefore_withEndOffset_checksPositionBeforeAbbreviation() {
+        var buffer = KeystrokeBuffer(capacity: 16)
+        buffer.append("x teh ")
+        XCTAssertTrue(buffer.hasWordBoundaryBefore(suffixLength: 3, endOffset: 1))
+        buffer.reset()
+        buffer.append("xteh ")
+        XCTAssertFalse(buffer.hasWordBoundaryBefore(suffixLength: 3, endOffset: 1))
+    }
 }

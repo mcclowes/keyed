@@ -11,6 +11,11 @@ final class Snippet {
     var usageCount: Int
     var isPinned: Bool = false
     var pinnedSortOrder: Int = 0
+    /// When true, the abbreviation only expands once the user types a delimiter
+    /// (space, punctuation, return). When false, expansion fires immediately on
+    /// match. Delimiter-triggered snippets are safer for triggers that are
+    /// prefixes of real words (e.g. `teh` → `the` won't fire inside `tehran`).
+    var requiresDelimiter: Bool = false
     var createdAt: Date
     var updatedAt: Date
 
@@ -20,7 +25,8 @@ final class Snippet {
         label: String = "",
         groupID: UUID? = nil,
         isPinned: Bool = false,
-        pinnedSortOrder: Int = 0
+        pinnedSortOrder: Int = 0,
+        requiresDelimiter: Bool = false
     ) {
         id = UUID()
         self.abbreviation = abbreviation
@@ -30,6 +36,7 @@ final class Snippet {
         usageCount = 0
         self.isPinned = isPinned
         self.pinnedSortOrder = pinnedSortOrder
+        self.requiresDelimiter = requiresDelimiter
         createdAt = .now
         updatedAt = .now
     }

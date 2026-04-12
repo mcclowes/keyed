@@ -6,6 +6,7 @@ struct SnippetDetailView: View {
     @State private var abbreviation: String = ""
     @State private var expansion: String = ""
     @State private var label: String = ""
+    @State private var requiresDelimiter: Bool = false
     @State private var errorMessage: String?
     @State private var saveTask: Task<Void, Never>?
 
@@ -26,6 +27,13 @@ struct SnippetDetailView: View {
                 TextEditor(text: $expansion)
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 120)
+            }
+
+            Section("Behavior") {
+                Toggle("Expand after delimiter", isOn: $requiresDelimiter)
+                    .help(
+                        "Wait for a space, punctuation, or return before expanding. Safer for triggers that could appear inside real words."
+                    )
             }
 
             Section("Menu Bar") {
@@ -54,12 +62,14 @@ struct SnippetDetailView: View {
         .onChange(of: abbreviation) { _, _ in scheduleSave() }
         .onChange(of: expansion) { _, _ in scheduleSave() }
         .onChange(of: label) { _, _ in scheduleSave() }
+        .onChange(of: requiresDelimiter) { _, _ in scheduleSave() }
     }
 
     private func loadFromSnippet() {
         abbreviation = snippet.abbreviation
         expansion = snippet.expansion
         label = snippet.label
+        requiresDelimiter = snippet.requiresDelimiter
     }
 
     private func scheduleSave() {
@@ -91,7 +101,8 @@ struct SnippetDetailView: View {
                 snippet,
                 abbreviation: trimmed == snippet.abbreviation ? nil : trimmed,
                 expansion: expansion == snippet.expansion ? nil : expansion,
-                label: label == snippet.label ? nil : label
+                label: label == snippet.label ? nil : label,
+                requiresDelimiter: requiresDelimiter == snippet.requiresDelimiter ? nil : requiresDelimiter
             )
             errorMessage = nil
         } catch {

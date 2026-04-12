@@ -4,23 +4,36 @@ import SwiftData
 
 private let logger = Logger(subsystem: "com.mcclowes.keyed", category: "SnippetStore")
 
+struct AbbreviationEntry: Equatable {
+    let expansion: String
+    let requiresDelimiter: Bool
+}
+
 @MainActor
 protocol SnippetStoring: AnyObject {
-    var abbreviationMap: [String: String] { get }
+    var abbreviationMap: [String: AbbreviationEntry] { get }
     var excludedBundleIDs: Set<String> { get }
     /// Cached list of pinned snippets, sorted by `pinnedSortOrder` then abbreviation.
     /// Participates in `@Observable` tracking so SwiftUI views can read it directly.
     var pinnedSnippets: [Snippet] { get }
 
-    // Snippets
+    /// Snippets
     @discardableResult
-    func addSnippet(abbreviation: String, expansion: String, label: String, groupID: UUID?) throws -> Snippet
+    func addSnippet(
+        abbreviation: String,
+        expansion: String,
+        label: String,
+        groupID: UUID?,
+        requiresDelimiter: Bool
+    ) throws -> Snippet
+    // swiftlint:disable:next function_parameter_count
     func updateSnippet(
         _ snippet: Snippet,
         abbreviation: String?,
         expansion: String?,
         label: String?,
-        groupID: UUID??
+        groupID: UUID??,
+        requiresDelimiter: Bool?
     ) throws
     func deleteSnippet(_ snippet: Snippet) throws
     func duplicateSnippet(_ snippet: Snippet) throws -> Snippet
@@ -56,7 +69,7 @@ protocol SnippetStoring: AnyObject {
 @Observable
 final class SnippetStore: SnippetStoring {
     private let modelContext: ModelContext
-    private(set) var abbreviationMap: [String: String] = [:]
+    private(set) var abbreviationMap: [String: AbbreviationEntry] = [:]
     private(set) var excludedBundleIDs: Set<String> = []
     private(set) var pinnedSnippets: [Snippet] = []
     /// Lowercase-abbreviation → cached snippet reference, used by `incrementUsageCount`
@@ -77,7 +90,8 @@ final class SnippetStore: SnippetStoring {
         abbreviation: String,
         expansion: String,
         label: String = "",
-        groupID: UUID? = nil
+        groupID: UUID? = nil,
+        requiresDelimiter: Bool = false
     ) throws -> Snippet {
         let trimmed = abbreviation.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -86,7 +100,13 @@ final class SnippetStore: SnippetStoring {
         if findSnippet(byAbbreviationCaseInsensitive: trimmed) != nil {
             throw SnippetStoreError.duplicateAbbreviation(trimmed)
         }
-        let snippet = Snippet(abbreviation: trimmed, expansion: expansion, label: label, groupID: groupID)
+        let snippet = Snippet(
+            abbreviation: trimmed,
+            expansion: expansion,
+            label: label,
+            groupID: groupID,
+            requiresDelimiter: requiresDelimiter
+        )
         modelContext.insert(snippet)
         try modelContext.save()
         rebuildAbbreviationMap()
@@ -100,7 +120,8 @@ final class SnippetStore: SnippetStoring {
         abbreviation: String? = nil,
         expansion: String? = nil,
         label: String? = nil,
-        groupID: UUID?? = nil
+        groupID: UUID?? = nil,
+        requiresDelimiter: Bool? = nil
     ) throws {
         if let abbreviation {
             let trimmed = abbreviation.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -117,6 +138,7 @@ final class SnippetStore: SnippetStoring {
         if let expansion { snippet.expansion = expansion }
         if let label { snippet.label = label }
         if let groupID { snippet.groupID = groupID }
+        if let requiresDelimiter { snippet.requiresDelimiter = requiresDelimiter }
         snippet.updatedAt = .now
         try modelContext.save()
         rebuildAbbreviationMap()
@@ -144,7 +166,8 @@ final class SnippetStore: SnippetStoring {
             abbreviation: candidate,
             expansion: snippet.expansion,
             label: snippet.label,
-            groupID: snippet.groupID
+            groupID: snippet.groupID,
+            requiresDelimiter: snippet.requiresDelimiter
         )
     }
 
@@ -295,7 +318,12 @@ final class SnippetStore: SnippetStoring {
         var inserted = 0
         for entry in entries where !existing.contains(entry.abbreviation.lowercased()) {
             modelContext.insert(
-                Snippet(abbreviation: entry.abbreviation, expansion: entry.expansion, label: entry.label)
+                Snippet(
+                    abbreviation: entry.abbreviation,
+                    expansion: entry.expansion,
+                    label: entry.label,
+                    requiresDelimiter: entry.requiresDelimiter
+                )
             )
             inserted += 1
         }
@@ -313,10 +341,13 @@ final class SnippetStore: SnippetStoring {
     // MARK: - Caches
 
     private func rebuildAbbreviationMap() {
-        var map: [String: String] = [:]
+        var map: [String: AbbreviationEntry] = [:]
         var byLowercase: [String: Snippet] = [:]
         for snippet in allSnippets() {
-            map[snippet.abbreviation] = snippet.expansion
+            map[snippet.abbreviation] = AbbreviationEntry(
+                expansion: snippet.expansion,
+                requiresDelimiter: snippet.requiresDelimiter
+            )
             byLowercase[snippet.abbreviation.lowercased()] = snippet
         }
         abbreviationMap = map
