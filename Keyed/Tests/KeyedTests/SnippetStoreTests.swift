@@ -34,7 +34,7 @@ final class SnippetStoreTests: XCTestCase {
 
     func test_addSnippet_updatesAbbreviationMap() throws {
         _ = try store.addSnippet(abbreviation: ":email", expansion: "test@example.com", label: "", groupID: nil)
-        XCTAssertEqual(store.abbreviationMap[":email"], "test@example.com")
+        XCTAssertEqual(store.abbreviationMap[":email"]?.expansion, "test@example.com")
     }
 
     func test_addSnippet_emptyAbbreviation_throws() {
@@ -70,7 +70,7 @@ final class SnippetStoreTests: XCTestCase {
         )
         try store.updateSnippet(snippet, abbreviation: nil, expansion: "new@example.com", label: nil, groupID: nil)
         XCTAssertEqual(snippet.expansion, "new@example.com")
-        XCTAssertEqual(store.abbreviationMap[":email"], "new@example.com")
+        XCTAssertEqual(store.abbreviationMap[":email"]?.expansion, "new@example.com")
     }
 
     func test_updateSnippet_changesAbbreviation() throws {
@@ -81,8 +81,8 @@ final class SnippetStoreTests: XCTestCase {
             groupID: nil
         )
         try store.updateSnippet(snippet, abbreviation: ":mail", expansion: nil, label: nil, groupID: nil)
-        XCTAssertNil(store.abbreviationMap[":email"])
-        XCTAssertEqual(store.abbreviationMap[":mail"], "test@example.com")
+        XCTAssertNil(store.abbreviationMap[":email"]?.expansion)
+        XCTAssertEqual(store.abbreviationMap[":mail"]?.expansion, "test@example.com")
     }
 
     // MARK: - Delete snippet
@@ -96,7 +96,7 @@ final class SnippetStoreTests: XCTestCase {
         )
         try store.deleteSnippet(snippet)
         XCTAssertTrue(store.allSnippets().isEmpty)
-        XCTAssertNil(store.abbreviationMap[":email"])
+        XCTAssertNil(store.abbreviationMap[":email"]?.expansion)
     }
 
     // MARK: - Duplicate snippet
@@ -223,8 +223,8 @@ final class SnippetStoreTests: XCTestCase {
         ]
         let inserted = store.seedDefaultSnippets(entries)
         XCTAssertEqual(inserted, 2)
-        XCTAssertEqual(store.abbreviationMap[";date"], "{date}")
-        XCTAssertEqual(store.abbreviationMap[";tm"], "™")
+        XCTAssertEqual(store.abbreviationMap[";date"]?.expansion, "{date}")
+        XCTAssertEqual(store.abbreviationMap[";tm"]?.expansion, "™")
     }
 
     func test_seedDefaultSnippets_skipsAlreadyPresentCaseInsensitive() throws {
@@ -235,8 +235,8 @@ final class SnippetStoreTests: XCTestCase {
         ]
         let inserted = store.seedDefaultSnippets(entries)
         XCTAssertEqual(inserted, 1)
-        XCTAssertEqual(store.abbreviationMap[";DATE"], "mine", "User's snippet must not be overwritten")
-        XCTAssertEqual(store.abbreviationMap[";tm"], "™")
+        XCTAssertEqual(store.abbreviationMap[";DATE"]?.expansion, "mine", "User's snippet must not be overwritten")
+        XCTAssertEqual(store.abbreviationMap[";tm"]?.expansion, "™")
     }
 
     func test_seedDefaultSnippets_bundledListIsNonEmptyAndUnique() {
@@ -332,8 +332,8 @@ final class SnippetStoreTests: XCTestCase {
 
     func test_deleteViaStore_removesFromAbbreviationMap() throws {
         let snippet = try store.addSnippet(abbreviation: ":gone", expansion: "bye", label: "", groupID: nil)
-        XCTAssertNotNil(store.abbreviationMap[":gone"])
+        XCTAssertNotNil(store.abbreviationMap[":gone"]?.expansion)
         try store.deleteSnippet(snippet)
-        XCTAssertNil(store.abbreviationMap[":gone"])
+        XCTAssertNil(store.abbreviationMap[":gone"]?.expansion)
     }
 }

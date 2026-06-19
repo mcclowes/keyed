@@ -7,6 +7,7 @@ struct AddSnippetView: View {
     @State private var abbreviation = ""
     @State private var expansion = ""
     @State private var label = ""
+    @State private var requiresDelimiter = false
     @State private var errorMessage: String?
     let groupID: UUID?
 
@@ -35,6 +36,11 @@ struct AddSnippetView: View {
                     .font(.system(.body, design: .monospaced))
                     .frame(minHeight: 80)
 
+                Toggle("Expand after delimiter", isOn: $requiresDelimiter)
+                    .help(
+                        "Wait for a space, punctuation, or return before expanding. Safer for triggers that could appear inside real words (e.g. \"teh\" inside \"tehran\")."
+                    )
+
                 if let errorMessage {
                     Text(errorMessage)
                         .foregroundStyle(.red)
@@ -53,7 +59,7 @@ struct AddSnippetView: View {
             }
             .padding()
         }
-        .frame(width: 400, height: 300)
+        .frame(width: 400, height: 340)
     }
 
     private func addSnippet() {
@@ -62,7 +68,8 @@ struct AddSnippetView: View {
                 abbreviation: trimmedAbbreviation,
                 expansion: expansion,
                 label: label,
-                groupID: groupID
+                groupID: groupID,
+                requiresDelimiter: requiresDelimiter
             )
             dismiss()
         } catch {

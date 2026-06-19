@@ -7,6 +7,14 @@ enum DefaultSnippets {
         let abbreviation: String
         let expansion: String
         let label: String
+        let requiresDelimiter: Bool
+
+        init(abbreviation: String, expansion: String, label: String, requiresDelimiter: Bool = false) {
+            self.abbreviation = abbreviation
+            self.expansion = expansion
+            self.label = label
+            self.requiresDelimiter = requiresDelimiter
+        }
     }
 
     static let entries: [Entry] = [

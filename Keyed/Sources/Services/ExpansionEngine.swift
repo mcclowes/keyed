@@ -17,8 +17,11 @@ final class ExpansionEngine {
     private let placeholderResolver = PlaceholderResolver()
 
     /// Abbreviations sorted by descending length so the first-matching suffix is always the longest.
-    private var sortedAbbreviations: [String] = []
-    private var abbreviationMap: [String: String] = [:]
+    /// Split into two lists so we can ask "is there an instant match?" separately from
+    /// "is there a delimiter-gated match behind this trailing delimiter?".
+    private var instantAbbreviations: [String] = []
+    private var delimitedAbbreviations: [String] = []
+    private var abbreviationMap: [String: AbbreviationEntry] = [:]
     private var excludedBundleIDs: Set<String> = []
     private var isExpanding = false
     private(set) var isEnabled = true
@@ -35,9 +38,13 @@ final class ExpansionEngine {
         buffer = KeystrokeBuffer(capacity: bufferCapacity)
     }
 
-    func updateAbbreviations(_ map: [String: String]) {
+    func updateAbbreviations(_ map: [String: AbbreviationEntry]) {
         abbreviationMap = map
-        sortedAbbreviations = map.keys.sorted { $0.count > $1.count }
+        let byLength = { (lhs: String, rhs: String) in lhs.count > rhs.count }
+        instantAbbreviations = map.compactMap { $0.value.requiresDelimiter ? nil : $0.key }
+            .sorted(by: byLength)
+        delimitedAbbreviations = map.compactMap { $0.value.requiresDelimiter ? $0.key : nil }
+            .sorted(by: byLength)
     }
 
     func updateExcludedApps(_ bundleIDs: Set<String>) {
@@ -81,7 +88,10 @@ final class ExpansionEngine {
         switch event {
         case let .character(char):
             buffer.append(char)
-            checkForMatch()
+            if isDelimiterString(char), tryDelimitedMatch(trailingDelimiter: char) {
+                return
+            }
+            tryInstantMatch()
 
         case .backspace:
             buffer.backspace()
@@ -94,22 +104,53 @@ final class ExpansionEngine {
         }
     }
 
-    private func checkForMatch() {
-        guard let matched = buffer.longestSuffixMatch(in: sortedAbbreviations) else { return }
-        guard let expansion = abbreviationMap[matched] else { return }
-        guard buffer.hasWordBoundaryBefore(suffixLength: matched.count) else { return }
+    /// A delimiter character is anything that isn't a letter or a number — matches the
+    /// word-boundary definition used elsewhere in the buffer.
+    private func isDelimiterString(_ string: String) -> Bool {
+        guard let char = string.first, string.count == 1 else { return false }
+        return !char.isLetter && !char.isNumber
+    }
 
-        let typed = buffer.typedSuffix(length: matched.count)
+    private func tryInstantMatch() {
+        guard let matched = buffer.longestSuffixMatch(in: instantAbbreviations) else { return }
+        guard buffer.hasWordBoundaryBefore(suffixLength: matched.count) else { return }
+        expand(matched: matched, trailingDelimiter: nil)
+    }
+
+    /// Called when the user has just typed a delimiter character. Looks for an abbreviation
+    /// flagged `requiresDelimiter` sitting in the buffer *before* that delimiter, and if
+    /// found replaces abbreviation+delimiter with expansion+delimiter.
+    private func tryDelimitedMatch(trailingDelimiter: String) -> Bool {
+        guard let matched = buffer.longestSuffixMatch(in: delimitedAbbreviations, endOffset: 1) else { return false }
+        guard buffer.hasWordBoundaryBefore(suffixLength: matched.count, endOffset: 1) else { return false }
+        expand(matched: matched, trailingDelimiter: trailingDelimiter)
+        return true
+    }
+
+    private func expand(matched: String, trailingDelimiter: String?) {
+        guard let entry = abbreviationMap[matched] else { return }
+
+        let endOffset = trailingDelimiter == nil ? 0 : 1
+        let typed = buffer.typedSuffix(length: matched.count, endOffset: endOffset)
         let casePattern = CaseTransform.detect(typed: typed, abbreviation: matched)
-        let caseExpansion = CaseTransform.apply(casePattern, to: expansion)
+        let caseExpansion = CaseTransform.apply(casePattern, to: entry.expansion)
 
         let resolved = placeholderResolver.resolveWithCursor(caseExpansion)
+        let finalText = resolved.text + (trailingDelimiter ?? "")
+        // If a {cursor} placeholder pushed the caret before the delimiter, leave it there;
+        // otherwise the caret lands after the delimiter automatically.
+        let cursorOffset = resolved.cursorOffset
+        // For delimiter expansion we delete abbrev+delimiter and re-emit both so the
+        // delimiter survives the replacement untouched (avoids fighting IME composition).
+        let deleteCount = matched.count + endOffset
 
-        logger.info("Expanding \(matched.count, privacy: .public) char abbreviation")
+        logger
+            .info(
+                "Expanding \(matched.count, privacy: .public) char abbreviation\(trailingDelimiter == nil ? "" : " (delimited)", privacy: .public)"
+            )
         isExpanding = true
         buffer.reset()
 
-        let matchedCharCount = matched.count
         // Disable the tap while we inject so our synthetic events cannot feed back into
         // the buffer, then re-enable it once injection has fully drained. The isExpanding
         // flag is a belt-and-braces guard in case pause/resume races with a late-arriving
@@ -118,9 +159,9 @@ final class ExpansionEngine {
         Task { [weak self] in
             guard let self else { return }
             await injector.replaceText(
-                abbreviationLength: matchedCharCount,
-                expansion: resolved.text,
-                cursorOffset: resolved.cursorOffset
+                abbreviationLength: deleteCount,
+                expansion: finalText,
+                cursorOffset: cursorOffset
             )
             await MainActor.run {
                 self.monitor.resume()
