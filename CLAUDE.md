@@ -9,6 +9,7 @@ Menu bar app, Swift 6 + SwiftUI + SwiftData.
 make generate    # Generate Keyed.xcodeproj from project.yml
 make build       # Build debug
 make test        # Run all tests
+make test-package # Check packaging with stubbed build tools
 make run         # Build + launch
 make release     # Build release (unsigned)
 make package     # Release + zip for distribution
@@ -106,6 +107,10 @@ Keyed/
 
 **Mock pattern**: All mocks in `Mocks.swift`. Protocol-based. `MockKeystrokeMonitor`, `MockTextInjector`, `MockAccessibilityService`.
 **SwiftData tests**: Use `ModelConfiguration(isStoredInMemoryOnly: true)`.
+
+**Packaging checks**: `make test-package` exercises the real Makefile with
+stubbed Xcode tools and real archive tools. It checks repeated packaging,
+paths with spaces, executable permissions, and symlinks without launching Keyed.
 
 ## Conventions
 

@@ -1,4 +1,4 @@
-.PHONY: generate build test clean run release package format lint setup
+.PHONY: generate build test test-package clean run release package format lint setup
 
 generate:
 	xcodegen generate
@@ -8,6 +8,9 @@ build: generate
 
 test: generate
 	xcodebuild -project Keyed.xcodeproj -scheme Keyed -destination 'platform=macOS' test
+
+test-package:
+	bash scripts/test-package.sh
 
 clean:
 	rm -rf DerivedData build
@@ -20,8 +23,8 @@ release: generate
 	xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Release build
 
 package: release
-	@BUILT_DIR=$$(xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Release -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $$NF}'); \
-	cd "$$BUILT_DIR" && zip -r Keyed.zip Keyed.app && \
+	@BUILT_DIR=$$(xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Release -showBuildSettings 2>/dev/null | awk '/^[[:space:]]*BUILT_PRODUCTS_DIR = / { sub(/^[[:space:]]*BUILT_PRODUCTS_DIR = /, ""); print; exit }'); \
+	ditto -c -k --keepParent "$$BUILT_DIR/Keyed.app" "$$BUILT_DIR/Keyed.zip" && \
 	echo "Package created at $$BUILT_DIR/Keyed.zip"
 
 format:
