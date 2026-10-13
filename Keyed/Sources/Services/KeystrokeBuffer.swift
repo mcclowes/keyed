@@ -78,9 +78,13 @@ struct KeystrokeBuffer {
             let lhs = storage[bufferIndex]
             let rhs = abbrevChars[i]
             if caseInsensitive {
-                if String(lhs).lowercased() != String(rhs).lowercased() { return false }
+                if String(lhs).lowercased() != String(rhs).lowercased() {
+                    return false
+                }
             } else {
-                if lhs != rhs { return false }
+                if lhs != rhs {
+                    return false
+                }
             }
         }
         return true

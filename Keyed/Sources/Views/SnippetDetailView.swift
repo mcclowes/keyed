@@ -66,7 +66,9 @@ struct SnippetDetailView: View {
         saveTask?.cancel()
         saveTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(300))
-            if Task.isCancelled { return }
+            if Task.isCancelled {
+                return
+            }
             persist()
         }
     }
