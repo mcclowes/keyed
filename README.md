@@ -29,6 +29,7 @@ make generate    # Generate Keyed.xcodeproj from project.yml
 make build       # Debug build
 make test        # Run all tests
 make test-package # Check packaging with stubbed build tools
+make test-run     # Check launch paths with stubbed build and launch tools
 make run         # Build and launch
 make release     # Release build (unsigned)
 make package     # Release + zip for distribution
@@ -43,6 +44,10 @@ deleted resources don't remain from previous builds. It preserves paths with
 spaces, executable permissions, and symlinks. `make test-package` checks these
 behaviors with temporary fixtures and real archive tools, without building or
 launching the app.
+
+`make run` preserves build paths containing spaces and stops if the build or
+build-settings lookup fails. `make test-run` checks these behaviors without
+building or launching the app.
 
 ## Stack
 

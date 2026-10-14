@@ -11,6 +11,7 @@ make build       # Build debug
 make test        # Run all tests
 make test-package # Check packaging with stubbed build tools
 make test-bump-helper # Check version helper arguments with stubbed Git
+make test-run     # Check launch paths with stubbed build and launch tools
 make run         # Build + launch
 make release     # Build release (unsigned)
 make package     # Release + zip for distribution
@@ -115,6 +116,10 @@ paths with spaces, executable permissions, and symlinks without launching Keyed.
 
 **Version helper checks**: `make test-bump-helper` verifies that invalid arguments
 leave metadata untouched and valid bumps retain their behavior, using stubbed Git.
+
+**Launch helper checks**: `make test-run` checks ordinary and spaced paths and
+ensures failed builds, failed settings lookups, or missing product directories
+never reach the stubbed launcher. It does not build or launch Keyed.
 
 ## Conventions
 

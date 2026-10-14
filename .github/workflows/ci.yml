@@ -15,11 +15,11 @@ jobs:
       - name: Install tools
         run: brew install swiftformat swiftlint shellcheck
 
-      - name: Check release helpers
+      - name: Check build and release helpers
         run: |
-          bash -n scripts/test-package.sh scripts/bump-version.sh scripts/test-bump-version.sh
-          shellcheck scripts/test-package.sh scripts/bump-version.sh scripts/test-bump-version.sh
-          make test-package test-bump-helper
+          bash -n scripts/test-package.sh scripts/bump-version.sh scripts/test-bump-version.sh scripts/test-run.sh
+          shellcheck scripts/test-package.sh scripts/bump-version.sh scripts/test-bump-version.sh scripts/test-run.sh
+          make test-package test-bump-helper test-run
 
       - name: Lint
         run: make lint

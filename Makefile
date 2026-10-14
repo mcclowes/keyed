@@ -1,4 +1,4 @@
-.PHONY: generate build test test-package test-bump-helper clean run release package format lint setup
+.PHONY: generate build test test-package test-bump-helper test-run clean run release package format lint setup
 
 generate:
 	xcodegen generate
@@ -15,12 +15,18 @@ test-package:
 test-bump-helper:
 	bash scripts/test-bump-version.sh
 
+test-run:
+	bash scripts/test-run.sh
+
 clean:
 	rm -rf DerivedData build
 	xcodebuild -project Keyed.xcodeproj -scheme Keyed clean 2>/dev/null || true
 
 run: build
-	open "$$(xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Debug -showBuildSettings 2>/dev/null | grep ' BUILT_PRODUCTS_DIR' | awk '{print $$NF}')/Keyed.app"
+	@BUILD_SETTINGS=$$(xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Debug -showBuildSettings) || exit $$?; \
+	BUILT_DIR=$$(printf '%s\n' "$$BUILD_SETTINGS" | awk '/^[[:space:]]*BUILT_PRODUCTS_DIR = / { sub(/^[[:space:]]*BUILT_PRODUCTS_DIR = /, ""); print; exit }'); \
+	test -n "$$BUILT_DIR" || { echo 'Xcode did not report a build products directory.' >&2; exit 1; }; \
+	open "$$BUILT_DIR/Keyed.app"
 
 release: generate
 	xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Release build
