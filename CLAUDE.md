@@ -113,6 +113,8 @@ Keyed/
 **Packaging checks**: `make test-package` exercises the real Makefile with
 stubbed Xcode tools and real archive tools. It checks repeated packaging,
 paths with spaces, executable permissions, and symlinks without launching Keyed.
+Failed builds, settings lookups, compression, validation, or publication keep the
+previous ZIP intact and clean temporary archive staging.
 
 **Version helper checks**: `make test-bump-helper` verifies that invalid arguments
 leave metadata untouched and valid bumps retain their behavior, using stubbed Git.

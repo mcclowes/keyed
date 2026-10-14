@@ -32,8 +32,16 @@ release: generate
 	xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Release build
 
 package: release
-	@BUILT_DIR=$$(xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Release -showBuildSettings 2>/dev/null | awk '/^[[:space:]]*BUILT_PRODUCTS_DIR = / { sub(/^[[:space:]]*BUILT_PRODUCTS_DIR = /, ""); print; exit }'); \
-	ditto -c -k --keepParent "$$BUILT_DIR/Keyed.app" "$$BUILT_DIR/Keyed.zip" && \
+	@BUILD_SETTINGS=$$(xcodebuild -project Keyed.xcodeproj -scheme Keyed -configuration Release -showBuildSettings 2>/dev/null) || exit $$?; \
+	BUILT_DIR=$$(printf '%s\n' "$$BUILD_SETTINGS" | awk '/^[[:space:]]*BUILT_PRODUCTS_DIR = / { sub(/^[[:space:]]*BUILT_PRODUCTS_DIR = /, ""); print; exit }'); \
+	test -n "$$BUILT_DIR" || { echo 'Xcode did not report a build products directory.' >&2; exit 1; }; \
+	test ! -d "$$BUILT_DIR/Keyed.zip" || { echo 'The package destination is a directory.' >&2; exit 1; }; \
+	KEYED_PACKAGE_STAGING=$$(mktemp -d "$$BUILT_DIR/.keyed-package.XXXXXX") || exit $$?; \
+	trap 'rm -rf "$$KEYED_PACKAGE_STAGING"' EXIT; \
+	trap 'exit 130' INT; trap 'exit 143' TERM; \
+	ditto -c -k --keepParent "$$BUILT_DIR/Keyed.app" "$$KEYED_PACKAGE_STAGING/Keyed.zip" && \
+	unzip -tq "$$KEYED_PACKAGE_STAGING/Keyed.zip" >/dev/null && \
+	mv -f "$$KEYED_PACKAGE_STAGING/Keyed.zip" "$$BUILT_DIR/Keyed.zip" && \
 	echo "Package created at $$BUILT_DIR/Keyed.zip"
 
 format:

@@ -39,9 +39,10 @@ make lint        # SwiftFormat --lint + SwiftLint --strict
 
 Or directly: `xcodegen generate && xcodebuild -project Keyed.xcodeproj -scheme Keyed build`
 
-`make package` creates a fresh `Keyed.zip` from the current release app, so
-deleted resources don't remain from previous builds. It preserves paths with
-spaces, executable permissions, and symlinks. `make test-package` checks these
+`make package` creates and validates a fresh archive before replacing `Keyed.zip`,
+so deleted resources don't remain from previous builds and failures preserve the
+previous package. It preserves paths with spaces, executable permissions, and
+symlinks. `make test-package` checks these
 behaviors with temporary fixtures and real archive tools, without building or
 launching the app.
 
