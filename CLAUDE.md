@@ -10,6 +10,7 @@ make generate    # Generate Keyed.xcodeproj from project.yml
 make build       # Build debug
 make test        # Run all tests
 make test-package # Check packaging with stubbed build tools
+make test-bump-helper # Check version helper arguments with stubbed Git
 make run         # Build + launch
 make release     # Build release (unsigned)
 make package     # Release + zip for distribution
@@ -111,6 +112,9 @@ Keyed/
 **Packaging checks**: `make test-package` exercises the real Makefile with
 stubbed Xcode tools and real archive tools. It checks repeated packaging,
 paths with spaces, executable permissions, and symlinks without launching Keyed.
+
+**Version helper checks**: `make test-bump-helper` verifies that invalid arguments
+leave metadata untouched and valid bumps retain their behavior, using stubbed Git.
 
 ## Conventions
 

@@ -1,4 +1,4 @@
-.PHONY: generate build test test-package clean run release package format lint setup
+.PHONY: generate build test test-package test-bump-helper clean run release package format lint setup
 
 generate:
 	xcodegen generate
@@ -11,6 +11,9 @@ test: generate
 
 test-package:
 	bash scripts/test-package.sh
+
+test-bump-helper:
+	bash scripts/test-bump-version.sh
 
 clean:
 	rm -rf DerivedData build
