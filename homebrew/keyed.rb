@@ -1,12 +1,13 @@
 cask "keyed" do
   version :latest
   sha256 :no_check
+
   url "https://github.com/mcclowes/keyed/releases/latest/download/Keyed.zip"
   name "Keyed"
-  desc "Native macOS text expansion tool"
+  desc "Native text expansion tool"
   homepage "https://github.com/mcclowes/keyed"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Keyed.app"
 

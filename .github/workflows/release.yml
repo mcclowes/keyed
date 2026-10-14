@@ -128,9 +128,10 @@ jobs:
           cask "keyed" do
             version "${{ github.ref_name }}"
             sha256 "${{ steps.artifact.outputs.sha256 }}"
+
             url "https://github.com/mcclowes/keyed/releases/download/${{ github.ref_name }}/Keyed.zip"
             name "Keyed"
-            desc "Native macOS text expansion tool"
+            desc "Native text expansion tool"
             homepage "https://github.com/mcclowes/keyed"
 
             depends_on macos: :sonoma
