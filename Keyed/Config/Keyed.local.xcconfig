@@ -1,0 +1,22 @@
+// Copy this file to Keyed.local.xcconfig and set CODE_SIGN_IDENTITY to
+// an identity visible in `security find-identity -v -p codesigning`.
+// Keyed.local.xcconfig is gitignored so each developer can sign with
+// their own identity without affecting CI or release builds.
+//
+// Why: macOS TCC (Accessibility grants) keys off the app's Designated
+// Requirement. With ad-hoc signing ("-") the DR pins to the cdhash,
+// which changes on every rebuild — so macOS re-prompts for permission.
+// Signing with a stable identity makes the DR reference the cert, and
+// the grant sticks across rebuilds.
+//
+// Options, in order of preference:
+//   1. A Developer ID Application cert (if you have one from Apple)
+//   2. An Apple Development cert
+//   3. A self-signed cert (Keychain Access → Certificate Assistant →
+//      Create a Certificate → Self Signed Root → Code Signing). Note:
+//      self-signed certs often don't show up in `security find-identity`
+//      until you mark them "Always Trust" for code signing.
+
+CODE_SIGN_IDENTITY = Developer ID Application
+DEVELOPMENT_TEAM = BCB43KG62T
+CODE_SIGN_STYLE = Manual
