@@ -81,7 +81,11 @@ struct SnippetListView: View {
         }
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            set: {
+                if !$0 {
+                    errorMessage = nil
+                }
+            }
         )) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {

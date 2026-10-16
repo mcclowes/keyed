@@ -114,9 +114,15 @@ final class SnippetStore: SnippetStoring {
             }
             snippet.abbreviation = trimmed
         }
-        if let expansion { snippet.expansion = expansion }
-        if let label { snippet.label = label }
-        if let groupID { snippet.groupID = groupID }
+        if let expansion {
+            snippet.expansion = expansion
+        }
+        if let label {
+            snippet.label = label
+        }
+        if let groupID {
+            snippet.groupID = groupID
+        }
         snippet.updatedAt = .now
         try modelContext.save()
         rebuildAbbreviationMap()

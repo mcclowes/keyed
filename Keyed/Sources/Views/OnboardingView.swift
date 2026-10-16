@@ -94,7 +94,9 @@ struct OnboardingView: View {
                         for _ in 0..<60 {
                             try? await Task.sleep(for: .seconds(1))
                             accessibilityService.refresh()
-                            if accessibilityService.isTrusted { return }
+                            if accessibilityService.isTrusted {
+                                return
+                            }
                         }
                     }
                 }
