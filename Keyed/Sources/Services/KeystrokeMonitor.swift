@@ -162,7 +162,9 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
         retainedSelf = nil
         stateLock.unlock()
 
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+        }
         if let source, let loop {
             CFRunLoopRemoveSource(loop, source, .commonModes)
             CFRunLoopStop(loop)
@@ -174,14 +176,18 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
         stateLock.lock()
         let tap = eventTap
         stateLock.unlock()
-        if let tap { CGEvent.tapEnable(tap: tap, enable: false) }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+        }
     }
 
     func resume() {
         stateLock.lock()
         let tap = eventTap
         stateLock.unlock()
-        if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+        if let tap {
+            CGEvent.tapEnable(tap: tap, enable: true)
+        }
     }
 
     fileprivate func handleCallback(type: CGEventType, event: CGEvent) {
@@ -191,7 +197,9 @@ final class CGEventTapMonitor: KeystrokeMonitoring, @unchecked Sendable {
             stateLock.lock()
             let tap = eventTap
             stateLock.unlock()
-            if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
+            if let tap {
+                CGEvent.tapEnable(tap: tap, enable: true)
+            }
             // Anything typed during the blackout is lost — tell the engine to discard its
             // buffer so a stale prefix cannot combine with new input to trigger an expansion.
             onKeystroke?(.tapReset)

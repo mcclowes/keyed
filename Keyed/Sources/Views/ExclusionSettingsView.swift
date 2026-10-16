@@ -55,7 +55,11 @@ struct ExclusionSettingsView: View {
         }
         .alert("Error", isPresented: Binding(
             get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
+            set: {
+                if !$0 {
+                    errorMessage = nil
+                }
+            }
         )) {
             Button("OK", role: .cancel) { errorMessage = nil }
         } message: {
@@ -110,7 +114,9 @@ struct RunningAppPickerView: View {
 
     private var filteredApps: [RunningApp] {
         let filtered = apps.filter { !existingBundleIDs.contains($0.bundleIdentifier) }
-        if searchText.isEmpty { return filtered }
+        if searchText.isEmpty {
+            return filtered
+        }
         return filtered.filter {
             $0.name.localizedStandardContains(searchText) ||
                 $0.bundleIdentifier.localizedStandardContains(searchText)
