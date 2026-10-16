@@ -219,6 +219,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 onChange()
+                // CI's compiler requires explicit self here.
+                // swiftformat:disable:next redundantSelf
                 self.observeForever(track: track, onChange: onChange)
             }
         }
