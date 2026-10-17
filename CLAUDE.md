@@ -9,6 +9,9 @@ Menu bar app, Swift 6 + SwiftUI + SwiftData.
 make generate    # Generate Keyed.xcodeproj from project.yml
 make build       # Build debug
 make test        # Run all tests
+make test-package # Check packaging with stubbed build tools
+make test-bump-helper # Check version helper arguments with stubbed Git
+make test-run     # Check launch paths with stubbed build and launch tools
 make run         # Build + launch
 make release     # Build release (unsigned)
 make package     # Release + zip for distribution
@@ -70,6 +73,7 @@ Keyed/
     ImportServiceTests.swift              # CSV + plist parsing
     CaseTransformTests.swift              # Case detection + application
     PlaceholderResolverTests.swift        # Placeholder resolution + cursor offset
+    TextInjectorTests.swift               # UTF-16 chunks preserve grapheme clusters
     Mocks.swift                           # All mock implementations
   Resources/
     Info.plist                            # LSUIElement: true, Accessibility description
@@ -82,7 +86,7 @@ Keyed/
 - **`ExpansionEngine`** — orchestrates keystroke monitoring + abbreviation matching + text injection. Case-insensitive matching with case-aware expansion, word-boundary enforcement (no mid-word expansion), cached abbreviation list. Placeholder resolution. App exclusions. `isExpanding` guard prevents feedback loops. Exposes `injectSnippet(_:)` for menu-bar pinned-snippet insertion (no abbreviation to delete; resolves placeholders + `{cursor}`).
 - **`KeystrokeBuffer`** — fixed-capacity ring buffer tracking typed characters. Supports exact and case-insensitive suffix matching, backspace, reset on boundary keys, and word-boundary lookbehind.
 - **`CGEventTapMonitor`** — system-wide keystroke capture via CGEventTap on a dedicated dispatch queue. Handles modifier keys (Option passes through for character composition), boundary keys, unicode extraction (4 UTF-16 code units for non-BMP support), `tapDisabledByTimeout`/`tapDisabledByUserInput` re-enablement. Manages its own retain via `Unmanaged` for lifetime safety.
-- **`UnicodeEventTextInjector`** — text injection via `CGEvent.keyboardSetUnicodeString`. No clipboard involvement — deletes the abbreviation with backspaces, then posts the expansion as a series of synthetic key events carrying Unicode string payloads.
+- **`UnicodeEventTextInjector`** — text injection via `CGEvent.keyboardSetUnicodeString`. Deletes the abbreviation with backspaces, then posts the expansion as synthetic key events without using the clipboard. UTF-16 chunks preserve grapheme clusters, including surrogate pairs, combining marks, and ZWJ emoji. A cluster larger than the event budget is emitted whole.
 - **`SnippetStore`** (`SnippetStoring` protocol) — SwiftData CRUD + abbreviation/exclusion caches. **All UI mutations go through this store** so the engine's live caches stay in sync. Case-insensitive duplicate detection, batched usage-count writes, group management, exclusion management, pin/unpin (`setPinned`, `pinnedSnippets`).
 - **`SettingsManager`** (`SettingsManaging` protocol) — UserDefaults-backed `@Observable` with launch-at-login via `SMAppService`.
 - **`ImportService`** — RFC 4180 CSV parser (quoted fields, escaped `""` quotes, embedded newlines, case-insensitive headers) and TextExpander `.textexpander` plist parser.
@@ -91,19 +95,33 @@ Keyed/
 
 ## Testing
 
-98 tests across 6 files. Run with `make test`.
+115 XCTest test methods declared across 7 suites. Run with `make test`.
 
 | File | Tests | Covers |
 |------|-------|--------|
-| `KeystrokeBufferTests` | 21 | Ring buffer, matching, word boundary, longest match, unicode, overflow, backspace |
+| `KeystrokeBufferTests` | 23 | Ring buffer, matching, word boundary after overflow/reset, longest match, Unicode, backspace |
 | `ExpansionEngineTests` | 22 | Matching, word boundary, ambiguous prefixes, disable, case, backspace, direct injection (pinned) |
-| `SnippetStoreTests` | 27 | CRUD, search, groups, usage count, exclusions, duplicate-collision, pinning, staleness regression |
-| `ImportServiceTests` | 9 | CSV, escaped quotes, embedded newlines, case-insensitive headers, TextExpander plist |
+| `SnippetStoreTests` | 34 | CRUD, search, groups, usage count, default snippets/exclusions, duplicate collisions, pinning, staleness regression |
+| `ImportServiceTests` | 10 | CSV, UTF-8 BOM, escaped quotes, embedded newlines, case-insensitive headers, TextExpander plist |
 | `CaseTransformTests` | 10 | Detection + application of case patterns including preservation of existing caps |
-| `PlaceholderResolverTests` | 9 | Date/time, cursor offset, strip |
+| `PlaceholderResolverTests` | 10 | Date/time, cursor offset after placeholder resolution, cursor stripping |
+| `TextInjectorTests` | 6 | UTF-16 chunk budgets, surrogate pairs, ZWJ emoji, combining marks, empty input |
 
 **Mock pattern**: All mocks in `Mocks.swift`. Protocol-based. `MockKeystrokeMonitor`, `MockTextInjector`, `MockAccessibilityService`.
 **SwiftData tests**: Use `ModelConfiguration(isStoredInMemoryOnly: true)`.
+
+**Packaging checks**: `make test-package` exercises the real Makefile with
+stubbed Xcode tools and real archive tools. It checks repeated packaging,
+paths with spaces, executable permissions, and symlinks without launching Keyed.
+Failed builds, settings lookups, compression, validation, or publication keep the
+previous ZIP intact and clean temporary archive staging.
+
+**Version helper checks**: `make test-bump-helper` verifies that invalid arguments
+leave metadata untouched and valid bumps retain their behavior, using stubbed Git.
+
+**Launch helper checks**: `make test-run` checks ordinary and spaced paths and
+ensures failed builds, failed settings lookups, or missing product directories
+never reach the stubbed launcher. It does not build or launch Keyed.
 
 ## Conventions
 
