@@ -1,18 +1,53 @@
 name: Release
 
 on:
+  workflow_call:
+    inputs:
+      nightly:
+        type: boolean
+        default: false
+      candidate:
+        type: string
+        default: ""
+      fingerprint:
+        type: string
+        default: ""
+      nightly_tag:
+        type: string
+        default: ""
+      nightly_version:
+        type: string
+        default: ""
   push:
     tags:
       - 'v*'
 
+concurrency:
+  group: release-${{ github.repository }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
+  deployments: write
 
 jobs:
   build:
     runs-on: macos-15
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+      NIGHTLY_SHA: ${{ inputs.candidate }}
+      NIGHTLY_FINGERPRINT: ${{ inputs.fingerprint }}
+      NIGHTLY_TAG: ${{ inputs.nightly_tag }}
+      NIGHTLY_VERSION: ${{ inputs.nightly_version }}
+      NIGHTLY_TAP_PATH: ${{ github.workspace }}/nightly-tap
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.candidate || github.sha }}
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        with:
+          node-version: 24
 
       - name: Install XcodeGen
         run: brew install xcodegen
@@ -46,6 +81,10 @@ jobs:
         env:
           TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
+          nightly_version_args=()
+          if [ -n "$NIGHTLY_VERSION" ]; then
+            nightly_version_args=(MARKETING_VERSION="$NIGHTLY_VERSION" CURRENT_PROJECT_VERSION="$NIGHTLY_VERSION")
+          fi
           xcodebuild -project Keyed.xcodeproj \
             -scheme Keyed \
             -configuration Release \
@@ -55,7 +94,7 @@ jobs:
             CODE_SIGNING_ALLOWED=YES \
             OTHER_CODE_SIGN_FLAGS="--timestamp" \
             CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO \
-            build
+            build "${nightly_version_args[@]}"
 
       - name: Notarize app
         env:
@@ -103,6 +142,7 @@ jobs:
           echo "sha256=$(shasum -a 256 "${BUILD_DIR}/Keyed.zip" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub Release
+        if: ${{ !inputs.nightly }}
         uses: softprops/action-gh-release@v2
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -121,6 +161,7 @@ jobs:
           prerelease: false
 
       - name: Update Homebrew tap
+        if: ${{ !inputs.nightly }}
         env:
           GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
         run: |
@@ -161,6 +202,22 @@ jobs:
               -f content="$(echo "$CASK_CONTENT" | base64)"
           fi
 
+      - name: Check out the nightly tap
+        if: ${{ inputs.nightly }}
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          repository: mcclowes/homebrew-keyed
+          path: nightly-tap
+          ref: main
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Publish the verified nightly
+        if: ${{ inputs.nightly }}
+        env:
+          TAP_GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          NIGHTLY_ARTIFACT: ${{ steps.artifact.outputs.zip_path }}
+        run: node scripts/nightly-release.mjs publish
+
       - name: Clean up keychain
         if: always()
-        run: security delete-keychain $RUNNER_TEMP/app-signing.keychain-db || true
+        run: security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
